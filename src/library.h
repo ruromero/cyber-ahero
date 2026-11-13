@@ -1,6 +1,12 @@
 #ifndef LIBRARY_H
 #define LIBRARY_H
 
+#include "fs.h"
+
+struct LaptopConfig;
+
+/* An Available Entry. Exactly one of shortcut / exe is set: the resolved
+ * Launch target. */
 typedef struct Game {
     char *name;
     char *dir;
@@ -20,13 +26,29 @@ typedef struct Game {
     int exe_score;
 } Game;
 
+typedef enum HiddenReason {
+    HIDDEN_NO_LAUNCH_INFO,  /* no shortcut, no exe= and no executable */
+    HIDDEN_NOT_FOUND        /* launch information given, but nothing exists */
+} HiddenReason;
+
+/* An Entry that is not shown on this laptop, and why. */
+typedef struct HiddenEntry {
+    char *name;
+    char *dir;
+    HiddenReason reason;
+} HiddenEntry;
+
 typedef struct Library {
     char *root;
-    Game *games;
+    Game *games;           /* Available Entries, sorted by name */
     int count;
+    HiddenEntry *hidden;   /* hidden Entries, sorted by name */
+    int hidden_count;
 } Library;
 
-Library *library_scan(const char *root);
+/* Scans the Entry folders of root. cfg is this laptop's configuration (may be
+ * NULL). */
+Library *library_scan(const Fs *fs, const char *root, const struct LaptopConfig *cfg);
 void library_free(Library *lib);
 
 #endif

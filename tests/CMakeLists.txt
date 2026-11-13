@@ -22,3 +22,5 @@ function(cyber_test name)
 endfunction()
 
 cyber_test(test_util test_util.c ${CYBER_SRC}/util.c)
+cyber_test(test_library test_library.c fake_fs.c ${CYBER_SRC}/library.c ${CYBER_SRC}/util.c)
+cyber_test(test_config test_config.c ${CYBER_SRC}/config.c ${CYBER_SRC}/util.c)

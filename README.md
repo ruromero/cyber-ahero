@@ -51,24 +51,41 @@ carátula, ficha, preview, descripción) va dentro de esa misma carpeta:
 ```
 games/
   Quake 3 Arena/
-    game.lnk              <- acceso directo que abre el juego
+    Quake 3 Arena.lnk     <- acceso directo que abre el juego (cualquier nombre)
     cover.png             <- carátula (también .ico, .jpg o .bmp)
     preview.mpg           <- vídeo de preview en MPEG-1, 4:3 (opcional)
     details.txt           <- datos de la ficha técnica (opcional)
     descripcion.txt       <- texto libre (opcional)
     juego.cfg             <- opciones del juego (opcional, ver más abajo)
   Doom/
-    game.lnk
+    juego.cfg             <- exe=D:\Juegos\Doom\doom.exe (sin acceso directo)
     cover.png
     details.txt
     preview.mpg
 ```
 
-Para lanzar el juego se busca, dentro de `games/<Nombre>/`, primero un `.lnk` y
-si no, un **`.exe`** (se elige el que más se parece al nombre de la carpeta y se
-descarta instaladores/servidores dedicados). Si el juego vive en una **subcarpeta**
-(por ejemplo `games/<Nombre>/<Nombre>/Juego.exe`), también se busca ahí el `.lnk`
-o el `.exe` cuando no hay ninguno en el nivel superior.
+Para lanzar el juego se elige, dentro de `games/<Nombre>/`, el primero que
+funcione de estos:
+
+1. el `exe=` de su `juego.cfg`, si ese archivo existe;
+2. cualquier **acceso directo** (`*.lnk`, con el nombre que sea) cuyo destino
+   existe en este portátil;
+3. un **`.exe`** de la carpeta (se elige el que más se parece al nombre de la
+   carpeta y se descartan instaladores/servidores dedicados).
+
+Si el juego vive en una **subcarpeta** (por ejemplo
+`games/<Nombre>/<Nombre>/Juego.exe`), también se buscan ahí el `.lnk` o el
+`.exe` cuando no hay ninguno en el nivel superior.
+
+**Solo se muestran los juegos que pueden arrancar.** Se ocultan:
+
+- las carpetas sin forma de lanzar el juego (solo carátula, ficha, etc.):
+  *sin información de lanzamiento*;
+- las que la tienen pero no existe en este portátil (un `exe=` que no está, o
+  accesos directos cuyo destino ya no existe): *instalación no encontrada*.
+
+Un acceso directo cuyo destino no se puede leer (por ejemplo, uno que apunta a
+algo que no es un archivo) se da por bueno y se deja abrir a Windows.
 
 `details.txt` (también se aceptan `ficha.txt`, `info.txt` o `datos.txt`) tiene
 una línea por dato, `Clave: valor`:
@@ -113,8 +130,10 @@ exe=ActionPuzzle100\ActionPuzzle.exe   <- ejecutable a lanzar
 # descripcion=sinopsis.txt             <- descripción
 ```
 
-El valor de `exe` gana siempre a la detección automática. Con esto no hace
-falta ni `.lnk` ni que el `.exe` se llame parecido a la carpeta.
+Si el archivo de `exe` existe, gana siempre a los accesos directos y a la
+detección automática. Con esto no hace falta ni `.lnk` ni que el `.exe` se llame
+parecido a la carpeta. Si no existe, se prueban los accesos directos y la
+detección automática; si nada funciona, el juego se oculta.
 
 ## Elegir la ruta de la biblioteca
 
@@ -126,6 +145,7 @@ La carpeta de juegos, por orden de prioridad:
 4. Por defecto: carpeta `games` junto al `.exe`
 
 En `cyber.cfg`, una ruta relativa se resuelve respecto a la carpeta del `.exe`.
+`cyber.cfg` se lee una sola vez, al arrancar.
 
 ## Compilar (desde `cmd` o PowerShell, sin MSYS2)
 

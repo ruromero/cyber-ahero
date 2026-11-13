@@ -1067,7 +1067,7 @@ static void toggle_fullscreen(App *a)
         SDL_SetWindowFullscreen(a->win, SDL_WINDOW_FULLSCREEN_DESKTOP);
 }
 
-int app_run(const char *library_root)
+int app_run(const char *library_root, const struct LaptopConfig *cfg)
 {
     SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "1");
 
@@ -1112,7 +1112,7 @@ int app_run(const char *library_root)
 
     app_metrics(&a);
 
-    a.lib = library_scan(library_root);
+    a.lib = library_scan(fs_win(), library_root, cfg);
     int cap = a.lib->count > 0 ? a.lib->count : 1;
     a.icons = calloc((size_t)cap, sizeof(SDL_Texture *));
     a.icon_tried = calloc((size_t)cap, 1);
