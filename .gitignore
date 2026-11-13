@@ -18,3 +18,6 @@
 *.log
 .DS_Store
 Thumbs.db
+
+# Obsidian vault settings
+.obsidian/
