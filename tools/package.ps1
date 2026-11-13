@@ -63,6 +63,21 @@ if ($Organizer) {
 
 $zip = Join-Path $OutDir "$name.zip"
 if (Test-Path -LiteralPath $zip) { Remove-Item -LiteralPath $zip -Force }
-Compress-Archive -Path $top -DestinationPath $zip
+# Compress-Archive in Windows PowerShell 5.1 writes entry names with '\',
+# which other unzip tools turn into literal file names. Write '/' ourselves.
+Add-Type -AssemblyName System.IO.Compression
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$archive = [System.IO.Compression.ZipFile]::Open($zip, [System.IO.Compression.ZipArchiveMode]::Create)
+try {
+    # Same path form as Get-ChildItem below (TEMP may be an 8.3 short path).
+    $base = (Get-Item -LiteralPath $stage).FullName.TrimEnd('\', '/')
+    Get-ChildItem -LiteralPath $top -Recurse -File | ForEach-Object {
+        $rel = $_.FullName.Substring($base.Length + 1).Replace('\', '/')
+        [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+            $archive, $_.FullName, $rel, [System.IO.Compression.CompressionLevel]::Optimal)
+    }
+} finally {
+    $archive.Dispose()
+}
 Remove-Item -Recurse -Force -LiteralPath $stage
 Write-Host "Paquete -> $zip"
