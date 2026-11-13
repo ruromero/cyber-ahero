@@ -71,6 +71,42 @@ static void test_library_root_defaults_to_games_next_to_exe(void)
     laptop_config_free(cfg);
 }
 
+/* ticket 10: attract= idle minutes */
+static void test_attract_defaults_to_three_minutes(void)
+{
+    LaptopConfig *cfg = laptop_config_parse("library=games\n");
+    CHECK_INT(laptop_config_attract_minutes(cfg), 3);
+    laptop_config_free(cfg);
+    CHECK_INT(laptop_config_attract_minutes(NULL), 3);
+}
+
+static void test_attract_reads_minutes_and_zero_turns_it_off(void)
+{
+    LaptopConfig *one = laptop_config_parse("attract = 1\n");
+    LaptopConfig *off = laptop_config_parse("ATTRACT=0\n");
+    CHECK_INT(laptop_config_attract_minutes(one), 1);
+    CHECK_INT(laptop_config_attract_minutes(off), 0);
+    laptop_config_free(one);
+    laptop_config_free(off);
+}
+
+static void test_attract_invalid_value_keeps_default(void)
+{
+    const char *bad[] = { "attract=soon\n", "attract=-2\n", "attract=2x\n", "attract=\n" };
+    for (int i = 0; i < 4; i++) {
+        LaptopConfig *cfg = laptop_config_parse(bad[i]);
+        CHECK_INT(laptop_config_attract_minutes(cfg), 3);
+        laptop_config_free(cfg);
+    }
+}
+
+static void test_attract_huge_value_is_capped_at_a_week(void)
+{
+    LaptopConfig *cfg = laptop_config_parse("attract=99999999999\n");
+    CHECK_INT(laptop_config_attract_minutes(cfg), 7 * 24 * 60);
+    laptop_config_free(cfg);
+}
+
 int main(void)
 {
     RUN_TEST(test_values_are_read_by_key_ignoring_case_and_spaces);
@@ -80,5 +116,9 @@ int main(void)
     RUN_TEST(test_library_root_then_environment);
     RUN_TEST(test_library_root_then_configuration_relative_to_exe_dir);
     RUN_TEST(test_library_root_defaults_to_games_next_to_exe);
+    RUN_TEST(test_attract_defaults_to_three_minutes);
+    RUN_TEST(test_attract_reads_minutes_and_zero_turns_it_off);
+    RUN_TEST(test_attract_invalid_value_keeps_default);
+    RUN_TEST(test_attract_huge_value_is_capped_at_a_week);
     return TEST_REPORT();
 }

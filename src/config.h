@@ -22,4 +22,10 @@ const char *laptop_config_get(const LaptopConfig *cfg, const char *key);
 char *laptop_config_library_root(const LaptopConfig *cfg, const char *arg, const char *env,
                                  const char *exe_dir);
 
+/* ticket 10: attract= idle minutes before Attract mode. 3 when absent or
+ * not a whole number >= 0; 0 turns Attract mode off; capped at one week. */
+#define ATTRACT_DEFAULT_MINUTES 3
+#define ATTRACT_MAX_MINUTES (7 * 24 * 60)
+int laptop_config_attract_minutes(const LaptopConfig *cfg);
+
 #endif

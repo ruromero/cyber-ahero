@@ -154,6 +154,24 @@ La carpeta de juegos, por orden de prioridad:
 En `cyber.cfg`, una ruta relativa se resuelve respecto a la carpeta del `.exe`.
 `cyber.cfg` se lee una sola vez, al arrancar.
 
+## Modo atracción (`attract=`)
+
+Si nadie toca el launcher durante un rato, pasa los juegos a pantalla
+completa, como una recreativa: cada juego disponible, en el orden de la
+biblioteca, con su preview durante 20 segundos (o hasta que acabe el vídeo,
+lo que ocurra antes); los juegos sin preview muestran su carátula 8 segundos.
+
+Cualquier movimiento del ratón, tecla o botón del mando vuelve al menú, y esa
+pulsación no hace nada más (nunca abre un juego). Mientras hay un juego
+abierto (el launcher no tiene el foco), el modo atracción no arranca.
+
+Los minutos sin uso se fijan en `cyber.cfg` con una línea `attract=`:
+`attract=3` es el valor por defecto, `attract=1` arranca tras un minuto y
+`attract=0` lo desactiva.
+
+Un valor que no sea un número entero (`attract=pronto`, `attract=-1`) deja los
+3 minutos por defecto.
+
 ## Compilar (desde `cmd` o PowerShell, sin MSYS2)
 
 Todo se hace con los scripts `.cmd`, que llaman a PowerShell internamente.

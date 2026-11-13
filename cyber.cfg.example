@@ -1,1 +1,2 @@
 library=games
+# attract=3   (minutos sin uso antes del modo atraccion; 0 = desactivado)
