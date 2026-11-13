@@ -424,8 +424,131 @@ static void test_absolute_exe_and_shortcuts_still_work_with_install_folders(void
     fake_fs_free(fs);
 }
 
+/* --- Launching options (ticket 04) --- */
+
+static void test_entry_carries_its_launch_arguments(void)
+{
+    FakeFs *fs = fake_fs_new();
+    fake_fs_file(fs, ROOT "\\Doom\\juego.cfg",
+                 "exe=Doom\\dosbox.exe\nargs=-conf doom.conf -noconsole\n");
+    fake_fs_file(fs, "C:\\Juegos\\Doom\\dosbox.exe", NULL);
+
+    Library *lib = scan_with(fs, LAPTOP);
+
+    CHECK_INT(lib->count, 1);
+    if (lib->count == 1)
+        CHECK_STR(lib->games[0].args, "-conf doom.conf -noconsole");
+    library_free(lib);
+    fake_fs_free(fs);
+}
+
+static void test_working_folder_defaults_to_the_executables_folder(void)
+{
+    FakeFs *fs = fake_fs_new();
+    fake_fs_file(fs, ROOT "\\Quake III\\juego.cfg", "exe=Quake3\\bin\\quake3.exe\n");
+    fake_fs_file(fs, "D:\\Games\\Quake3\\bin\\quake3.exe", NULL);
+
+    Library *lib = scan_with(fs, LAPTOP);
+
+    CHECK_INT(lib->count, 1);
+    if (lib->count == 1) {
+        CHECK_STR(lib->games[0].work_dir, "D:\\Games\\Quake3\\bin");
+        CHECK_STR(lib->games[0].args, NULL);
+    }
+    library_free(lib);
+    fake_fs_free(fs);
+}
+
+static void test_relative_working_folder_is_taken_from_the_executables_folder(void)
+{
+    FakeFs *fs = fake_fs_new();
+    fake_fs_file(fs, ROOT "\\Quake III\\juego.cfg", "exe=Quake3\\bin\\quake3.exe\ndir=..\\data\n");
+    fake_fs_file(fs, "D:\\Games\\Quake3\\bin\\quake3.exe", NULL);
+
+    Library *lib = scan_with(fs, LAPTOP);
+
+    CHECK_INT(lib->count, 1);
+    if (lib->count == 1)
+        CHECK_STR(lib->games[0].work_dir, "D:\\Games\\Quake3\\bin\\..\\data");
+    library_free(lib);
+    fake_fs_free(fs);
+}
+
+static void test_absolute_working_folder_is_used_as_is(void)
+{
+    FakeFs *fs = fake_fs_new();
+    fake_fs_file(fs, ROOT "\\Doom\\juego.cfg", "exe=DOSBox\\dosbox.exe\ndir=C:\\Juegos\\Doom\n");
+    fake_fs_file(fs, "D:\\Games\\DOSBox\\dosbox.exe", NULL);
+
+    Library *lib = scan_with(fs, LAPTOP);
+
+    CHECK_INT(lib->count, 1);
+    if (lib->count == 1)
+        CHECK_STR(lib->games[0].work_dir, "C:\\Juegos\\Doom");
+    library_free(lib);
+    fake_fs_free(fs);
+}
+
+static void test_automatic_executable_starts_in_its_own_folder(void)
+{
+    FakeFs *fs = fake_fs_new();
+    fake_fs_file(fs, ROOT "\\Worms\\Juego\\worms.exe", NULL);
+
+    Library *lib = scan_with(fs, LAPTOP);
+
+    CHECK_INT(lib->count, 1);
+    if (lib->count == 1)
+        CHECK_STR(lib->games[0].work_dir, ROOT "\\Worms\\Juego");
+    library_free(lib);
+    fake_fs_free(fs);
+}
+
+static void test_shortcut_keeps_its_own_working_folder(void)
+{
+    FakeFs *fs = fake_fs_new();
+    fake_fs_shortcut(fs, ROOT "\\Doom\\Doom.lnk", "C:\\Juegos\\Doom\\doom.exe");
+    fake_fs_file(fs, "C:\\Juegos\\Doom\\doom.exe", NULL);
+    fake_fs_file(fs, ROOT "\\Doom\\juego.cfg", "dir=C:\\Otra\n");
+
+    Library *lib = scan_with(fs, LAPTOP);
+
+    CHECK_INT(lib->count, 1);
+    if (lib->count == 1) {
+        CHECK_STR(lib->games[0].shortcut, ROOT "\\Doom\\Doom.lnk");
+        CHECK_STR(lib->games[0].work_dir, NULL);
+    }
+    library_free(lib);
+    fake_fs_free(fs);
+}
+
+static void test_entry_names_the_process_to_wait_for(void)
+{
+    FakeFs *fs = fake_fs_new();
+    fake_fs_file(fs, ROOT "\\Age II\\juego.cfg", "exe=AoE2\\launcher.exe\nwait=empires2.exe\n");
+    fake_fs_file(fs, "C:\\Juegos\\AoE2\\launcher.exe", NULL);
+    fake_fs_file(fs, ROOT "\\Worms\\juego.cfg", "exe=Worms\\worms.exe\n");
+    fake_fs_file(fs, "C:\\Juegos\\Worms\\worms.exe", NULL);
+
+    Library *lib = scan_with(fs, LAPTOP);
+
+    CHECK_INT(lib->count, 2);
+    if (lib->count == 2) {
+        CHECK_STR(lib->games[0].wait, "empires2.exe");
+        CHECK_STR(lib->games[1].wait, NULL);
+    }
+    library_free(lib);
+    fake_fs_free(fs);
+}
+
 int main(void)
 {
+    RUN_TEST(test_entry_carries_its_launch_arguments);
+    RUN_TEST(test_working_folder_defaults_to_the_executables_folder);
+    RUN_TEST(test_relative_working_folder_is_taken_from_the_executables_folder);
+    RUN_TEST(test_absolute_working_folder_is_used_as_is);
+    RUN_TEST(test_automatic_executable_starts_in_its_own_folder);
+    RUN_TEST(test_shortcut_keeps_its_own_working_folder);
+    RUN_TEST(test_entry_names_the_process_to_wait_for);
     RUN_TEST(test_file_name_search_goes_two_levels_deep_in_listed_order);
     RUN_TEST(test_executable_deeper_than_two_levels_is_not_found);
     RUN_TEST(test_game_in_no_install_folder_is_hidden_as_not_found);

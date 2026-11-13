@@ -27,7 +27,8 @@ Pensado para funcionar en **Windows XP de 32 bits** y también en Windows de
 5. A los ~0,4 s empieza a reproducirse el vídeo de preview en bucle (con
    sonido). Si no hay vídeo, se muestra la imagen o un aviso.
 6. El juego **no** se abre al pasar el ratón: pulsa **JUGAR** (o Intro/Espacio,
-   o doble clic sobre el icono).
+   o doble clic sobre el icono). Mientras juegas, el lanzador se oculta y
+   espera; al cerrar el juego vuelve solo.
 
 ### Controles
 
@@ -45,6 +46,8 @@ Pensado para funcionar en **Windows XP de 32 bits** y también en Windows de
 | Moverse con mando | Cruceta o stick izquierdo |
 | Abrir el juego con mando | Botón A (en mandos antiguos, botón 1) |
 | Cerrar la ficha con mando | Botón B (en mandos antiguos, botón 2) |
+| Abrir el Organizador | Botón de lista junto al de tema (arriba a la derecha) |
+| Reescanear la biblioteca | F5 (fuera del modo kiosko) o botón Reescanear del Organizador |
 
 Sirven los mandos tipo Xbox y los mandos DirectInput antiguos; se pueden
 conectar o desconectar con el menú abierto. El mando solo controla el menú:
@@ -150,6 +153,37 @@ detección automática. Con esto no hace falta ni `.lnk` ni que el `.exe` se lla
 parecido a la carpeta. Si no existe, se prueban los accesos directos y la
 detección automática; si nada funciona, el juego se oculta.
 
+### Argumentos, carpeta de trabajo y proceso a esperar
+
+```
+exe=DOSBox\dosbox.exe
+args=-conf doom.conf -noconsole    <- argumentos para el ejecutable
+dir=..\Doom                         <- carpeta de trabajo
+wait=empires2.exe                   <- proceso real del juego (ver abajo)
+```
+
+- **`args=`**: se pasan tal cual al ejecutable, detrás de su ruta entre
+  comillas (`"D:\Games\DOSBox\dosbox.exe" -conf doom.conf -noconsole`). Si un
+  argumento lleva espacios, ponle tú las comillas.
+- **`dir=`**: carpeta en la que arranca el juego. Relativa a la carpeta del
+  ejecutable ya resuelto (`..\Doom` con el ejemplo de arriba es
+  `D:\Games\DOSBox\..\Doom`) o absoluta. Sin `dir=`, el juego arranca en la
+  carpeta de su ejecutable. Los accesos directos usan la carpeta que diga el
+  propio `.lnk`.
+- **`wait=`**: para juegos que arrancan con un lanzador/ayudante que se cierra
+  enseguida. Es el nombre del ejecutable del juego de verdad (`empires2.exe`,
+  `empires2` o `AoE2\empires2.exe` valen igual). El lanzador busca ese proceso
+  durante un máximo de **60 segundos** y espera a que termine; si no aparece,
+  vuelve el menú.
+
+Al pulsar JUGAR el lanzador arranca el juego él mismo, oculta su ventana, deja
+de dibujar y espera (sin gastar CPU) a que el juego termine. Entonces vuelve el
+menú, se **reescanea la biblioteca** (aparecen los juegos instalados mientras
+tanto) y se redibuja. Con un acceso directo se espera al proceso que devuelva
+Windows; si no devuelve ninguno (p. ej. un `.lnk` a algo que no es un
+programa), el menú vuelve enseguida, salvo que se indique `wait=`. Si el juego
+no se puede arrancar, el menú muestra *No se pudo iniciar <juego>*.
+
 ## Una biblioteca para todos los portátiles
 
 La misma carpeta `games` (la biblioteca maestra) se copia tal cual a todos los
@@ -194,6 +228,27 @@ Aquí el override manda: se lanza el Quake instalado con su instalador. Sin esa
 línea se encontraría también `E:\JUEGOS\Quake 3 Arena\quake3.exe` gracias a
 la búsqueda por nombre.
 
+## Vista Organizador
+
+Para preparar un portátil sin salir del menú: el botón con forma de lista, junto
+al botón de tema (arriba a la derecha), abre la vista **Organizador** de la
+biblioteca de este portátil. Muestra:
+
+- arriba, cuántos juegos hay **disponibles**, **ocultos** e **incompletos**;
+- los juegos **ocultos** y por qué: *sin información para lanzarlo* (la carpeta
+  no tiene acceso directo, ni `exe=`, ni ejecutable) o *instalación no
+  encontrada* (la hay, pero el juego no está instalado en este portátil);
+- los juegos disponibles a los que les **falta** portada (`cover.png`),
+  vista previa (`preview.mpg`) o ficha (`details.txt`), con lo que falta.
+
+Los juegos completos no aparecen. Si la lista no cabe, se desplaza con la rueda
+del ratón o con los botones `^` y `v`. Todo se maneja solo con el ratón.
+
+**Reescanear** vuelve a leer la biblioteca y actualiza el menú y la vista: tras
+instalar un juego o arreglar su `juego.cfg`, pulsarlo basta para verlo, sin
+reiniciar el launcher. Fuera del modo kiosko, **F5** hace lo mismo desde
+cualquier pantalla. **Cerrar**, Esc o un clic fuera del recuadro vuelven al menú.
+
 ## Elegir la ruta de la biblioteca
 
 La carpeta de juegos, por orden de prioridad:
@@ -205,6 +260,24 @@ La carpeta de juegos, por orden de prioridad:
 
 En `cyber.cfg`, una ruta relativa se resuelve respecto a la carpeta del `.exe`.
 `cyber.cfg` se lee una sola vez, al arrancar.
+
+## Modo atracción (`attract=`)
+
+Si nadie toca el launcher durante un rato, pasa los juegos a pantalla
+completa, como una recreativa: cada juego disponible, en el orden de la
+biblioteca, con su preview durante 20 segundos (o hasta que acabe el vídeo,
+lo que ocurra antes); los juegos sin preview muestran su carátula 8 segundos.
+
+Cualquier movimiento del ratón, tecla o botón del mando vuelve al menú, y esa
+pulsación no hace nada más (nunca abre un juego). Mientras hay un juego
+abierto (el launcher no tiene el foco), el modo atracción no arranca.
+
+Los minutos sin uso se fijan en `cyber.cfg` con una línea `attract=`:
+`attract=3` es el valor por defecto, `attract=1` arranca tras un minuto y
+`attract=0` lo desactiva.
+
+Un valor que no sea un número entero (`attract=pronto`, `attract=-1`) deja los
+3 minutos por defecto.
 
 ## Compilar (desde `cmd` o PowerShell, sin MSYS2)
 

@@ -13,5 +13,7 @@ void video_play(Video *v);
 int video_valid(const Video *v);
 int video_width(const Video *v);
 int video_height(const Video *v);
+/* How many times playback reached the end (and started over). */
+int video_end_count(const Video *v);
 
 #endif

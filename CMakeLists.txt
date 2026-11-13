@@ -37,12 +37,15 @@ set(APP_SOURCES
     src/fs_win.c
     src/video.c
     src/text.c
-    src/launcher.c
+    src/launch.c
+    src/launch_win.c
     src/util.c
     src/util_win.c
     src/pad.c
     src/pad_sdl.c
     src/redraw.c
+    src/organizer.c
+    src/attract.c
     third_party/pl_mpeg_impl.c
 )
 
