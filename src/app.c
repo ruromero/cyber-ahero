@@ -752,8 +752,11 @@ static void launch(App *a)
     t.args = g->args;
     t.work_dir = g->work_dir;
     t.wait = g->wait;
+    t.con = g->con;
+    t.con_args = g->con_args;
 
-    LaunchResult r = launch_and_wait(proc_win(), &t, hide_menu, a);
+    int helper_failed = 0;
+    LaunchResult r = launch_and_wait(proc_win(), &t, hide_menu, a, &helper_failed);
     if (r == LAUNCH_FAILED) {
         char buf[300];
         SDL_snprintf(buf, sizeof(buf), "No se pudo iniciar %s", g->name);
@@ -768,7 +771,17 @@ static void launch(App *a)
     SDL_FlushEvents(SDL_JOYAXISMOTION, SDL_JOYBUTTONUP);
     SDL_FlushEvents(SDL_CONTROLLERAXISMOTION, SDL_CONTROLLERBUTTONUP);
     attract_game_running(&a->attract, 0, SDL_GetTicks());
+    /* ticket 09: g is freed by the rescan, so the message is made first */
+    char helper_msg[300];
+    helper_msg[0] = 0;
+    if (helper_failed) {
+        SDL_snprintf(helper_msg, sizeof(helper_msg),
+                     "No se pudo iniciar el mapeador del mando de %s", g->name);
+        SDL_Log("%s (con=%s)", helper_msg, g->con);
+    }
     app_rescan(a);
+    if (helper_msg[0])
+        app_status(a, helper_msg);
     a->leave_time = SDL_GetTicks() - 1000000;
     a->frame_last = SDL_GetTicks();
 }

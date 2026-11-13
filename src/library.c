@@ -155,6 +155,8 @@ typedef struct Scan {
     char *cfg_exe;     /* exe= from juego.cfg, resolved but maybe missing */
     char *cfg_exe_rel; /* exe= as written, when it is a relative path */
     char *cfg_dir;     /* dir= as written */
+    char *cfg_con;     /* con= as written */
+    char *cfg_con_dir; /* folder of the juego.cfg that set con= */
 } Scan;
 
 static void add_link(Scan *s, const char *path, int first)
@@ -346,6 +348,14 @@ static void apply_cfg_value(Scan *s, const char *cfg_dir, const char *key, const
     } else if (_stricmp(key, "wait") == 0) {
         free(g->wait);
         g->wait = xstrdup(val);
+    } else if (_stricmp(key, "con") == 0) {
+        free(s->cfg_con);
+        s->cfg_con = xstrdup(val);
+        free(s->cfg_con_dir);
+        s->cfg_con_dir = cfg_dir ? xstrdup(cfg_dir) : NULL;
+    } else if (_stricmp(key, "con_args") == 0) {
+        free(g->con_args);
+        g->con_args = xstrdup(val);
     } else if (_stricmp(key, "descripcion") == 0 || _stricmp(key, "desc") == 0) {
         free(g->desc_path);
         g->desc_path = resolve_cfg_value(s, cfg_dir, val);
@@ -629,6 +639,8 @@ static void game_free(Game *g)
     free(g->args);
     free(g->work_dir);
     free(g->wait);
+    free(g->con);
+    free(g->con_args);
     for (int k = 0; k < g->meta_count; k++) {
         free(g->meta_keys[k]);
         free(g->meta_vals[k]);
@@ -646,6 +658,8 @@ static void scan_free(Scan *s)
     free(s->cfg_exe);
     free(s->cfg_exe_rel);
     free(s->cfg_dir);
+    free(s->cfg_con);
+    free(s->cfg_con_dir);
 }
 
 /* Working folder of an executable Launch target (ticket 04). */
@@ -664,6 +678,34 @@ static void resolve_work_dir(Scan *s)
         g->work_dir = path_join(exe_dir, s->cfg_dir);
         free(exe_dir);
     }
+}
+
+/* The mapper helper's executable (ticket 09), resolved like exe=: absolute
+ * as-is; a relative con= in each Install folder in listed order, then
+ * relative to the Entry folder or its juego.cfg, then its file name searched
+ * two levels deep in the Install folders. When none exists the Entry-relative
+ * path is kept: the Entry stays Available and starting the helper fails at
+ * JUGAR, which the menu reports. */
+static void resolve_con(Scan *s)
+{
+    const char *v = s->cfg_con;
+    if (!v)
+        return;
+    if (path_is_absolute(v)) {
+        s->g.con = xstrdup(v);
+        return;
+    }
+    if ((s->g.con = find_in_installs(s, v)) != NULL)
+        return;
+    char *p = resolve_cfg_value(s, s->cfg_con_dir, v);
+    if (!fs_exists(s, p)) {
+        char *found = search_installs_by_name(s, v);
+        if (found) {
+            free(p);
+            p = found;
+        }
+    }
+    s->g.con = p;
 }
 
 static int game_cmp(const void *a, const void *b)
@@ -718,6 +760,7 @@ Library *library_scan(const Fs *fs, const char *root, const struct LaptopConfig 
         HiddenReason reason;
         if (resolve_launch_target(&s, &reason)) {
             resolve_work_dir(&s);
+            resolve_con(&s);
             if (s.g.desc_path)
                 s.g.desc_text = fs->read_text(fs->ctx, s.g.desc_path);
             if (s.g.meta_path)

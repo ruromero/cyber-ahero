@@ -51,13 +51,57 @@ static ProcHandle find_within_limit(const ProcApi *api, const char *wait)
     return p;
 }
 
+/* Folder part of path, without the trailing separator except for a root
+ * (C:\ or a leading \); NULL when path has no folder. */
+static char *folder_of(const char *path)
+{
+    const char *base = path_basename(path);
+    if (base == path)
+        return NULL;
+    size_t n = (size_t)(base - path) - 1;
+    if (n == 0 || path[n - 1] == ':')
+        n++;
+    return xstrndup(path, n);
+}
+
+/* Starts the mapper helper in its own folder (where JoyToKey and the like
+ * keep their profiles). NULL when there is none or it failed (*failed). */
+static ProcHandle start_helper(const ProcApi *api, const LaunchTarget *t, int *failed)
+{
+    if (!t->con || !*t->con)
+        return NULL;
+    char *dir = folder_of(t->con);
+    char *cmd = launch_command_line(t->con, t->con_args);
+    ProcHandle h = api->start_helper(api->ctx, t->con, cmd, dir);
+    free(cmd);
+    free(dir);
+    if (!h)
+        *failed = 1;
+    return h;
+}
+
+static LaunchResult run_game(const ProcApi *api, const LaunchTarget *t,
+                             void (*on_started)(void *user), void *user);
+
 LaunchResult launch_and_wait(const ProcApi *api, const LaunchTarget *t,
+                             void (*on_started)(void *user), void *user,
+                             int *helper_failed)
+{
+    int failed = 0;
+    ProcHandle helper = start_helper(api, t, &failed);
+    if (helper_failed)
+        *helper_failed = failed;
+    LaunchResult r = run_game(api, t, on_started, user);
+    if (helper)
+        api->stop_helper(api->ctx, helper);
+    return r;
+}
+
+/* Steps 1-4. */
+static LaunchResult run_game(const ProcApi *api, const LaunchTarget *t,
                              void (*on_started)(void *user), void *user)
 {
     ProcHandle proc = NULL;
-
-    /* ticket 09: start the mapper helper (con=, con_args=) here, just before
-     * the game, and close it at "game ended" below (also on failure). */
 
     if (t->exe) {
         char *cmd = launch_command_line(t->exe, t->args);
@@ -87,7 +131,7 @@ LaunchResult launch_and_wait(const ProcApi *api, const LaunchTarget *t,
     else
         r = LAUNCH_NOT_WAITED;
 
-    /* game ended (ticket 09: close the mapper helper here) */
+    /* game ended; launch_and_wait closes the mapper helper next */
     if (real)
         api->close(api->ctx, real);
     if (proc)

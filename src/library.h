@@ -31,6 +31,9 @@ typedef struct Game {
      * shortcut, which keeps its own. */
     char *work_dir;
     char *wait;      /* wait=: executable name of the real game process, or NULL */
+    /* Gamepad mapper helper (ticket 09), from the Entry's options */
+    char *con;       /* con=: the helper's executable, resolved like exe=, or NULL */
+    char *con_args;  /* con_args=: its arguments (typically a profile), or NULL */
 } Game;
 
 typedef enum HiddenReason {
