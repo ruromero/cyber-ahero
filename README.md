@@ -195,6 +195,9 @@ ctest --test-dir build/host-tests --output-on-failure
 
 En una build de Windows se activan con `-DCYBER_TESTS=ON`.
 
+Qué instalar (y cómo desinstalarlo) en macOS y Windows para compilar y pasar
+los tests: [docs/dev-setup.md](docs/dev-setup.md).
+
 ## Distribuir
 
 Copia junto al `.exe`:
