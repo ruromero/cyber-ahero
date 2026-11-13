@@ -55,6 +55,11 @@ mientras hay un juego en primer plano el launcher lo ignora.
 
 ## Estructura de `games`
 
+El repositorio solo trae `games/Ejemplo`, una Entry de muestra. Tus juegos,
+carátulas y vídeos se quedan en tu copia local: `.gitignore` excluye el resto de
+`games/`, porque ese contenido tiene copyright de sus dueños (ver
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)).
+
 Cada **subcarpeta** de `games` es un juego, y todo lo suyo (acceso directo,
 carátula, ficha, preview, descripción) va dentro de esa misma carpeta:
 
@@ -419,6 +424,39 @@ los tests: [docs/dev-setup.md](docs/dev-setup.md).
 
 ## Distribuir
 
+### Descargar una versión compilada
+
+Cada versión publicada (etiqueta `v*`) tiene en
+[Releases](../../releases) tres `.zip`, generados por el pipeline de GitHub
+Actions (`.github/workflows/build.yml`):
+
+| Archivo | Para qué |
+| --- | --- |
+| `cyber-ahero-<versión>-x86.zip` | Portátiles con Windows XP (32 bits); también funciona en Windows de 64 bits |
+| `cyber-ahero-<versión>-x64.zip` | Portátiles con Windows de 64 bits |
+| `cyber-ahero-<versión>-organizador.zip` | Herramientas del Organizador para su PC moderno: scraping y descubrimiento (`tools\scrape.cmd`) |
+
+Cada zip del lanzador trae el `.exe`, las DLLs de SDL, el logo, los `.bat` del
+modo kiosko, `games/Ejemplo`, los `.example` y las licencias. Copia tu propia
+carpeta `games` al lado, o apunta a ella con `cyber.cfg`.
+
+Cada push a `main` también compila, pasa los tests en Windows y deja los zips
+como artefacto de la ejecución. Para publicar una versión:
+
+```
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+Para generar los mismos zips en local, tras compilar:
+
+```
+powershell -File tools\package.ps1 -Arch x86 -Version v1.0.0
+powershell -File tools\package.ps1 -Organizer -Version v1.0.0
+```
+
+### A mano
+
 Copia junto al `.exe`:
 
 - `SDL2.dll`, `SDL2_image.dll`, `SDL2_ttf.dll` (el script de build las copia).
@@ -601,10 +639,18 @@ src/           código de la aplicación
 third_party/   pl_mpeg.h (decodificador MPEG-1, cabecera única MIT)
 tools/         scripts de dependencias, build, conversión de vídeo y scraping
 tools/tests/   tests Pester de scrape.ps1 (descubrimiento)
-games/         los juegos (cada subcarpeta es un juego, con su carátula y ficha)
+games/         la biblioteca (en el repo solo games/Ejemplo; el resto es local)
 assets/        logo
 deps/          dependencias descargadas (SDL)
 _toolchain/    compilador portable descargado (GCC/CMake/Ninja)
 build/         salida de compilación
-dist/          RARs generados por pack_rar
+dist/          zips de tools/package.ps1 y RARs de pack_rar
+.github/       pipeline de GitHub Actions (build win32/win64, tests, releases)
 ```
+
+## Licencia
+
+Código bajo licencia [MIT](LICENSE). Las licencias de pl_mpeg, SDL2,
+SDL2_image, SDL2_ttf, FreeType y HarfBuzz, y qué contenido **no** se incluye
+(juegos, carátulas, vídeos), están en
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

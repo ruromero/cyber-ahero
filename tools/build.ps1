@@ -3,7 +3,8 @@ param(
     [string]$Arch = "x64",
     [string]$CC = "",
     [string]$CMake = "cmake",
-    [switch]$Clean
+    [switch]$Clean,
+    [switch]$Tests
 )
 
 $ErrorActionPreference = "Stop"
@@ -64,12 +65,19 @@ $cmakeArgs = @(
     "-DSDL2_ttf_DIR=$sdl2ttf"
 )
 if ($CC) { $cmakeArgs += "-DCMAKE_C_COMPILER=$CC" }
+if ($Tests) { $cmakeArgs += "-DCYBER_TESTS=ON" }
 
 & $CMake @cmakeArgs
 if ($LASTEXITCODE -ne 0) { throw "Fallo la configuracion de CMake" }
 
 & $CMake --build $bdir --config Release
 if ($LASTEXITCODE -ne 0) { throw "Fallo la compilacion" }
+
+if ($Tests) {
+    $ctest = Join-Path (Split-Path -Parent (Get-Command $CMake).Source) "ctest.exe"
+    & $ctest --test-dir $bdir --output-on-failure
+    if ($LASTEXITCODE -ne 0) { throw "Fallaron los tests" }
+}
 
 foreach ($dep in "SDL2", "SDL2_image", "SDL2_ttf") {
     $bin = Join-Path $deps "$dep\$triplet\bin"

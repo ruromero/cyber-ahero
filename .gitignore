@@ -21,3 +21,8 @@ Thumbs.db
 
 # Obsidian vault settings
 .obsidian/
+
+# The Library: games and their scraped art stay local (copyright).
+# Only the original placeholder Entry is versioned.
+/games/*
+!/games/Ejemplo/

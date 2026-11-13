@@ -1,0 +1,1 @@
+Entry de ejemplo para ver la estructura de la biblioteca. Copia esta carpeta, cámbiale el nombre y ajusta juego.cfg, o genera Entries con tools\scrape.cmd -Discover.
