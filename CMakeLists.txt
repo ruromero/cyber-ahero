@@ -46,6 +46,8 @@ set(APP_SOURCES
     src/redraw.c
     src/organizer.c
     src/attract.c
+    src/kiosk.c
+    src/kiosk_win.c
     third_party/pl_mpeg_impl.c
 )
 
@@ -59,6 +61,7 @@ target_link_libraries(cyber_ahero PRIVATE
     SDL2_ttf::SDL2_ttf
     ole32
     uuid
+    advapi32
 )
 
 if(MINGW)

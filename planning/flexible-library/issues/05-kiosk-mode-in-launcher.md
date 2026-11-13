@@ -1,6 +1,6 @@
 ---
 type: ticket
-status: open
+status: done
 tags: [kiosk, build]
 spec: "[[flexible-library/spec]]"
 blocked-by: ["[[flexible-library/issues/04-launcher-starts-and-waits]]"]
@@ -29,7 +29,14 @@ Without the Kiosk switch the launcher stays an ordinary window and Quit just exi
 - [ ] Without administrator rights, Kiosk mode still starts and the log says which settings could not be applied.
 - [ ] The log records settings applied, games started and ended, and failures.
 - [ ] The same checklist passes on a modern 64-bit laptop.
-- [ ] The repo and build no longer contain the PowerShell kiosk scripts or the separate keyboard blocker.
-- [ ] README's Kiosk mode section describes the new behaviour and recovery.
+- [x] The repo and build no longer contain the PowerShell kiosk scripts or the separate keyboard blocker.
+- [x] README's Kiosk mode section describes the new behaviour and recovery.
 
 ## Comments
+
+- Built test-first in `tests/test_kiosk.c` against portable `src/kiosk.c`: `cli_parse` (`--kiosko`, `--limpiar` wins over it, any other `--` switch ignored; the first non-switch argument is still the Library root, in any order), the lockdown plan applied by `kiosk_enter` / undone by `kiosk_leave` / `kiosk_recover` through an injected `KioskApi` (registry set/remove, stop/start shell, stop other launchers, log) with a fake registry: full lockdown with admin; without admin the machine-scope settings are reported "NO aplicado (hace falta administrador)" and the rest still applies; enter then leave gives back exactly the registry it started from (including XP's stock `AutoRestartShell=1`); leave removes `CiberAhKiosko` from `HKLM\...\Windows\CurrentVersion\Run` and the wrong `HKLM\...\Windows NT\CurrentVersion\Run`; recovery ends running launchers first. Log lines come from `kiosk_log_line` ("YYYY-MM-DD HH:MM:SS  msg\r\n") and `kiosk_game_msg`.
+- Deviation from the PowerShell script: the automatic start is registered in **HKCU** `Software\Microsoft\Windows\CurrentVersion\Run` (value `CiberAhKiosko` = `"<exe dir>\kiosko.bat"`), so it works without administrator rights ("Kiosk mode still starts"); the HKLM Run value of older versions is removed on Quit/recovery. `AutoRestartShell` in HKLM is set back to 1 (Windows' default) rather than deleted; everything else is deleted, as `limpiador.ps1` did.
+- Win32 side in `src/kiosk_win.c` (`kiosk_win()`, `kiosk_win_log`, `kiosk_win_keyboard`): `RegCreateKeyExA`/`RegSetValueExA`/`RegDeleteValueA` (HKLM with `KEY_WOW64_64KEY` so the 32-bit build writes the real keys on 64-bit Windows), explorer.exe closed with Toolhelp + `TerminateProcess` and kept closed by a thread that closes it every 2 s until Quit, restarted with `CreateProcessA(%WINDIR%\explorer.exe)`; the `WH_KEYBOARD_LL` hook runs on its own thread with its own message loop. All imports checked in the i686 `-mcrtdll=msvcrt-os` build: msvcrt.dll only, no api-ms-win-crt, no post-XP Win32 functions.
+- `main.c` parses the switches; `--limpiar` runs `kiosk_recover` with no UI and exits 0. `--kiosko` enters before the menu; Quit makes `app_run` return `APP_QUIT`, then main leaves Kiosk mode and exits with `KIOSK_EXIT_QUIT` (10). Any other exit leaves the lockdown in place and `kiosko.bat` starts the launcher again after ~2 s. Recovery terminates running launchers with exit code 10, so the `kiosko.bat` loop stops too.
+- `app.c`: `app_in_kiosk` returns the mode (F5 off in Kiosk mode); Esc no longer quits in Kiosk mode; a Quit button (X) left of the Organizer button works in both modes (outside Kiosk it just exits). Ticket 04's flow: the keyboard is released in `hide_menu` (once the game has started) and blocked again after the wait; games started/ended/failed are logged. `src/launch.c` untouched.
+- Not verifiable here (no Windows/Wine; cross-builds and unit tests only), left unticked for a run on an XP laptop and a modern 64-bit laptop: the lockdown actually taking effect (no desktop/taskbar/Start, Win key/Run/Task Manager blocked), keys swallowed in the menu and working in a game, the relaunch after killing the process, autostart after reboot/logon, Quit restoring the desktop without logoff and the next logon being normal, `limpiar.bat` recovering a locked laptop, the log contents on a non-admin account, and the `.bat` quoting/`start /min` behaviour under XP's cmd.exe.

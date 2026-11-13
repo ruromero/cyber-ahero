@@ -3,6 +3,7 @@
 #include "video.h"
 #include "text.h"
 #include "launch.h"
+#include "kiosk.h"
 #include "util.h"
 #include "pad_sdl.h"
 #include "redraw.h"
@@ -77,6 +78,9 @@ typedef struct App {
     int org_scroll;         /* first visible row */
     /* ticket 10: Attract mode */
     Attract attract;
+    /* ticket 05: Kiosk mode */
+    int kiosk;
+    int quit;               /* the Quit button ended the menu */
 } App;
 
 /*
@@ -729,10 +733,24 @@ static void pad_menu_action(App *a, const SDL_Rect *grid, PadAction act)
 
 static void app_rescan(App *a); /* ticket 06 section below */
 
+/* Ticket 05: in Kiosk mode the log records games, and the keyboard is only
+   blocked while the menu shows. */
+static void kiosk_game_event(App *a, KioskGameEvent ev, const char *name)
+{
+    if (!a->kiosk)
+        return;
+    char buf[300];
+    kiosk_game_msg(buf, sizeof(buf), ev, name);
+    kiosk_win_log(buf);
+}
+
 static void hide_menu(void *user)
 {
     App *a = user;
     SDL_HideWindow(a->win);
+    if (a->kiosk)
+        kiosk_win_keyboard(0);
+    kiosk_game_event(a, KIOSK_GAME_STARTED, a->lib->games[a->selected].name);
     if (attract_game_running(&a->attract, 1, SDL_GetTicks()))
         stop_video(a);
 }
@@ -758,8 +776,12 @@ static void launch(App *a)
         char buf[300];
         SDL_snprintf(buf, sizeof(buf), "No se pudo iniciar %s", g->name);
         app_status(a, buf);
+        kiosk_game_event(a, KIOSK_GAME_FAILED, g->name);
         return;
     }
+    kiosk_game_event(a, KIOSK_GAME_ENDED, g->name);
+    if (a->kiosk)
+        kiosk_win_keyboard(1);
 
     SDL_ShowWindow(a->win);
     SDL_RaiseWindow(a->win);
@@ -1156,11 +1178,10 @@ static void draw_theme_button(App *a, int w)
 
 /* ---- ticket 06: Organizer view and rescan -------------------------------- */
 
-/* Ticket 05 (Kiosk mode) replaces this: F5 only rescans outside Kiosk mode. */
+/* F5 only rescans outside Kiosk mode (ticket 05). */
 static int app_in_kiosk(const App *a)
 {
-    (void)a;
-    return 0;
+    return a->kiosk;
 }
 
 static void app_caches_alloc(App *a)
@@ -1250,6 +1271,44 @@ static void draw_organizer_button(App *a, int w)
                           (int)(2 * s) > 1 ? (int)(2 * s) : 2 };
         SDL_RenderFillRect(a->ren, &line);
     }
+}
+
+/* ---- ticket 05: Quit button, left of the Organizer button ---------------- */
+
+static SDL_Rect quit_button_rect(App *a, int w)
+{
+    SDL_Rect o = organizer_button_rect(a, w);
+    SDL_Rect r = { o.x - o.w - (int)(8 * a->scale), o.y, o.w, o.h };
+    return r;
+}
+
+static void draw_quit_button(App *a, int w)
+{
+    SDL_Rect r = quit_button_rect(a, w);
+    double s = a->scale;
+    int hov = in_rect(r, a->mouse_x, a->mouse_y);
+    round_rect_c(a->ren, r, (int)(4 * s), hov ? (SDL_Color){ 214, 72, 52, 255 } : COL_HDR_L);
+    /* a thick white X */
+    int m = r.w / 4;
+    int th = (int)(2 * s) > 1 ? (int)(2 * s) : 2;
+    SDL_SetRenderDrawColor(a->ren, 236, 239, 245, 255);
+    for (int k = -th; k <= th; k++) {
+        SDL_RenderDrawLine(a->ren, r.x + m + k, r.y + m, r.x + r.w - m + k, r.y + r.h - m);
+        SDL_RenderDrawLine(a->ren, r.x + r.w - m + k, r.y + m, r.x + m + k, r.y + r.h - m);
+    }
+}
+
+/* Outside Kiosk mode Quit simply exits; in Kiosk mode main() then leaves
+   Kiosk mode. Returns 1 when the click hit the button. */
+static int quit_click(App *a, int x, int y)
+{
+    int w = BASE_W, h = BASE_H;
+    SDL_GetRendererOutputSize(a->ren, &w, &h);
+    if (!in_rect(quit_button_rect(a, w), x, y))
+        return 0;
+    a->quit = 1;
+    a->running = 0;
+    return 1;
 }
 
 typedef struct OrgLayout {
@@ -1459,6 +1518,7 @@ static void draw(App *a)
     }
     draw_theme_button(a, w);
     draw_organizer_button(a, w);
+    draw_quit_button(a, w);
 
     if (fn && a->status[0] && !SDL_TICKS_PASSED(SDL_GetTicks(), a->status_until)) {
         char buf[256];
@@ -1536,7 +1596,7 @@ static void toggle_fullscreen(App *a)
         SDL_SetWindowFullscreen(a->win, SDL_WINDOW_FULLSCREEN_DESKTOP);
 }
 
-int app_run(const char *library_root, const struct LaptopConfig *cfg)
+int app_run(const char *library_root, const struct LaptopConfig *cfg, int kiosk)
 {
     SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "1");
 
@@ -1575,6 +1635,9 @@ int app_run(const char *library_root, const struct LaptopConfig *cfg)
     a.win = win;
     a.ren = ren;
     a.running = 1;
+    a.kiosk = kiosk;
+    if (kiosk)
+        kiosk_win_keyboard(1);
     a.selected = -1;
     a.pinned = -1;
     a.frame_last = SDL_GetTicks();
@@ -1627,7 +1690,9 @@ int app_run(const char *library_root, const struct LaptopConfig *cfg)
                 break;
             case SDL_MOUSEBUTTONDOWN:
                 a.mouse_active = 1;
-                if (e.button.button == SDL_BUTTON_LEFT && organizer_click(&a, e.button.x, e.button.y)) {
+                if (e.button.button == SDL_BUTTON_LEFT && quit_click(&a, e.button.x, e.button.y)) {
+                    /* ticket 05: Quit button */
+                } else if (e.button.button == SDL_BUTTON_LEFT && organizer_click(&a, e.button.x, e.button.y)) {
                     /* ticket 06: Organizer button or view */
                 } else if (e.button.button == SDL_BUTTON_LEFT) {
                     int w = BASE_W, h = BASE_H;
@@ -1682,7 +1747,7 @@ int app_run(const char *library_root, const struct LaptopConfig *cfg)
                     if (a.pinned >= 0) {
                         a.pinned = -1;
                         set_selected(&a, -1);
-                    } else {
+                    } else if (!a.kiosk) {
                         a.running = 0;
                     }
                     break;
@@ -1767,5 +1832,7 @@ int app_run(const char *library_root, const struct LaptopConfig *cfg)
     SDL_DestroyRenderer(ren);
     SDL_DestroyWindow(win);
     SDL_Quit();
-    return 0;
+    if (kiosk)
+        kiosk_win_keyboard(0);
+    return a.quit ? APP_QUIT : 0;
 }
