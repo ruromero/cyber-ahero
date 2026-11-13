@@ -36,3 +36,4 @@ spec: "[[flexible-library/spec]]"
   draws a frame; time-driven changes are scheduled from the same state `update()`
   checks; while a preview plays the loop runs at the previous 60 fps cap.
   Please tick these on a Windows/XP laptop.
+- Pending manual check on Windows: With the menu idle and no preview playing, the launcher uses close to 0% CPU in Task Manager; Hovering a game still starts its preview after the usual delay, and the preview plays smoothly; Hover, selection, theme switching, scrolling, status messages and the grace period when leaving a tile all look and behave as before; Resizing and toggling fullscreen still redraw correctly; Works with the software renderer used on XP laptops without 3D acceleration.

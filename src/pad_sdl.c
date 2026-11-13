@@ -59,6 +59,24 @@ static int is_controller(SDL_JoystickID id)
     return SDL_GameControllerFromInstanceID(id) != NULL;
 }
 
+PadEventKind pad_sdl_kind(const SDL_Event *e)
+{
+    switch (e->type) {
+    case SDL_JOYDEVICEADDED:
+    case SDL_JOYDEVICEREMOVED:
+        return PAD_EVENT_DEVICE;
+    case SDL_JOYBUTTONDOWN:
+    case SDL_CONTROLLERBUTTONDOWN:
+        return PAD_EVENT_BUTTON;
+    case SDL_JOYHATMOTION:
+    case SDL_JOYAXISMOTION:
+    case SDL_CONTROLLERAXISMOTION:
+        return PAD_EVENT_MOTION;
+    default:
+        return PAD_EVENT_NONE;
+    }
+}
+
 PadAction pad_sdl_event(PadNav *nav, const SDL_Event *e)
 {
     switch (e->type) {

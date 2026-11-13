@@ -88,7 +88,7 @@ static void test_install_folders_are_split_on_semicolons_in_order(void)
     laptop_config_free(cfg);
 }
 
-/* ticket 10: attract= idle minutes */
+/* attract= idle minutes */
 static void test_attract_defaults_to_three_minutes(void)
 {
     LaptopConfig *cfg = laptop_config_parse("library=games\n");

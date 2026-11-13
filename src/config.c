@@ -86,7 +86,7 @@ char *laptop_config_library_root(const LaptopConfig *cfg, const char *arg, const
     return path_join(exe_dir, "games");
 }
 
-/* --- One Library for every laptop (ticket 02) --- */
+/* --- One Library for every laptop --- */
 
 char **laptop_config_installs(const LaptopConfig *cfg)
 {
@@ -133,7 +133,6 @@ const char *laptop_config_exe_override(const LaptopConfig *cfg, const char *entr
     return val;
 }
 
-/* ticket 10 */
 int laptop_config_attract_minutes(const LaptopConfig *cfg)
 {
     const char *v = laptop_config_get(cfg, "attract");

@@ -14,6 +14,7 @@ solo necesitan el contenido de `build\<arch>\`.
 | SDL2, SDL2_image, SDL2_ttf (mingw) | enlazar el lanzador | copiar `deps\` desde Windows (ver abajo) | `tools\fetch_deps.cmd` |
 | PowerShell 7 | ejecutar `tools/scrape.ps1` y sus tests | Homebrew `powershell` | ya viene PowerShell 5.1; opcional PowerShell 7 |
 | Pester ≥ 5 | tests de `scrape.ps1` (descubrimiento) | módulo de usuario | módulo de usuario |
+| yt-dlp + ffmpeg (opcionales) | `scrape.ps1 -Video`: bajar el tráiler y convertirlo a `preview.mpg` | Homebrew `yt-dlp`, `ffmpeg` | `winget` `yt-dlp.yt-dlp`, `Gyan.FFmpeg` |
 
 No hay Wine en el Mac (la cask `wine-stable` de Homebrew está deshabilitada
 desde 2026-09-01), así que los `.exe` de Windows, tests incluidos, se compilan
@@ -35,6 +36,13 @@ pwsh -NoProfile -Command 'Install-Module Pester -Scope CurrentUser -Force -SkipP
 ```
 
 Pester queda en `~/.local/share/powershell/Modules/Pester/`.
+
+Opcional, solo para que el Organizador baje vistas previas con
+`scrape.ps1 -Video` (el script los busca en el `PATH`):
+
+```sh
+brew install yt-dlp ffmpeg
+```
 
 `deps/` no está en git. En el Mac se copia la carpeta `deps\` que genera
 `tools\fetch_deps.cmd` en Windows (son los paquetes oficiales *mingw* de SDL;
@@ -71,6 +79,7 @@ pwsh -NoProfile -Command 'Invoke-Pester tools/tests'
 ### Desinstalar
 
 ```sh
+brew uninstall yt-dlp ffmpeg      # si los instalaste para -Video
 pwsh -NoProfile -Command 'Uninstall-Module Pester -AllVersions'   # antes de quitar pwsh
 rm -rf ~/.local/share/powershell                                   # módulos y perfil de pwsh
 brew uninstall powershell
@@ -104,6 +113,14 @@ Install-Module Pester -Scope CurrentUser -Force -SkipPublisherCheck -MinimumVers
 PowerShell 7 es opcional (`winget install Microsoft.PowerShell`); los scripts
 funcionan con el PowerShell 5.1 que trae Windows.
 
+Opcional, solo para `scrape.ps1 -Video` (vistas previas); abre una consola
+nueva después para que el `PATH` los incluya:
+
+```
+winget install yt-dlp.yt-dlp
+winget install Gyan.FFmpeg
+```
+
 ### Compilar y probar
 
 ```
@@ -120,6 +137,8 @@ PowerShell: `Invoke-Pester tools\tests`.
 ```powershell
 Uninstall-Module Pester -AllVersions        # la 3.4 que trae Windows se queda
 winget uninstall Microsoft.PowerShell       # solo si instalaste PowerShell 7
+winget uninstall yt-dlp.yt-dlp              # solo si los instalaste para -Video
+winget uninstall Gyan.FFmpeg
 ```
 
 y borra `_toolchain\`, `deps\` y `build\` dentro del repo.

@@ -5,7 +5,7 @@ param(
     [switch]$CoverOnly,
     [switch]$Video,
     [switch]$DryRun,
-    # Discovery mode (ticket 07): new Entries for Installations no Entry
+    # Discovery mode: new Entries for Installations no Entry
     # points to yet.
     [switch]$Discover,
     [string]$Installs = '',
@@ -21,20 +21,30 @@ $ErrorActionPreference = 'Stop'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $repoRoot = Split-Path -Parent $PSScriptRoot
 
-# The laptop configuration (cyber.cfg), read like the launcher does: first
-# value of each key wins, '#' and ';' start comments.
-if (-not $LaptopConfig) { $LaptopConfig = Join-Path $repoRoot 'cyber.cfg' }
-$laptop = @{}
-if (Test-Path -LiteralPath $LaptopConfig) {
-    foreach ($line in Get-Content -LiteralPath $LaptopConfig) {
+# The key=value files (cyber.cfg, scrape.cfg, an Entry's juego.cfg), read
+# like the launcher does: '#' and ';' start comment lines, keys and values
+# are trimmed, keys are lower-cased. Returns every pair in file order (each
+# caller decides whether the first or the last value of a key wins).
+function Read-KeyValueFile($path) {
+    $pairs = New-Object System.Collections.Generic.List[object]
+    if (-not $path -or -not (Test-Path -LiteralPath $path)) { return , $pairs }
+    foreach ($line in Get-Content -LiteralPath $path) {
         $t = $line.Trim()
         if (-not $t -or $t.StartsWith('#') -or $t.StartsWith(';')) { continue }
         $eq = $t.IndexOf('=')
         if ($eq -lt 1) { continue }
         $k = $t.Substring(0, $eq).Trim().ToLower()
-        $v = $t.Substring($eq + 1).Trim()
-        if ($k -and -not $laptop.ContainsKey($k)) { $laptop[$k] = $v }
+        if (-not $k) { continue }
+        $pairs.Add([pscustomobject]@{ Key = $k; Value = $t.Substring($eq + 1).Trim() })
     }
+    return , $pairs
+}
+
+# The laptop configuration (cyber.cfg): first value of each key wins.
+if (-not $LaptopConfig) { $LaptopConfig = Join-Path $repoRoot 'cyber.cfg' }
+$laptop = @{}
+foreach ($p in (Read-KeyValueFile $LaptopConfig)) {
+    if (-not $laptop.ContainsKey($p.Key)) { $laptop[$p.Key] = $p.Value }
 }
 
 if (-not $Root) {
@@ -49,13 +59,7 @@ if (-not $Root) {
 
 $cfg = @{}
 if (-not $Config) { $Config = Join-Path $repoRoot 'scrape.cfg' }
-if (Test-Path -LiteralPath $Config) {
-    foreach ($line in Get-Content -LiteralPath $Config) {
-        if ($line -match '^\s*([^#;][^=]*?)\s*=\s*(.*?)\s*$') {
-            $cfg[$Matches[1].Trim().ToLower()] = $Matches[2].Trim()
-        }
-    }
-}
+foreach ($p in (Read-KeyValueFile $Config)) { $cfg[$p.Key] = $p.Value }
 function Cfg($name, $envName) {
     if ($cfg.ContainsKey($name) -and $cfg[$name]) { return $cfg[$name] }
     $v = [Environment]::GetEnvironmentVariable($envName)
@@ -271,7 +275,7 @@ if ($Video) {
 }
 
 # ---------------------------------------------------------------------------
-# Discovery (ticket 07). Mirrors the launcher's resolution rules
+# Discovery. Mirrors the launcher's resolution rules
 # (src/library.c, resolve_launch_target) to find which top-level folders of
 # the Install folders no Entry resolves into, and its executable scoring
 # (score_exe) to pick each candidate's executable.
@@ -318,10 +322,11 @@ function Get-InstallFolders {
     return $list
 }
 
-# score_exe in src/library.c: words (3+ letters or digits) of the folder name
-# found in the file name +20 each; installers, uninstallers, dedicated
-# servers, crash reporters, updaters and config tools -60; renderer variants
-# -30; minus one per 8 characters of the name.
+# Mirrors score_exe in src/library.c (change both together): words (3+
+# letters or digits) of the folder name found in the file name +20 each;
+# installers, uninstallers, dedicated servers, crash reporters, updaters and
+# config tools -60; renderer variants -30; minus one per 8 characters of the
+# name.
 function Get-ExeScore($fileName, $gameName) {
     $base = $fileName
     $dot = $base.LastIndexOf('.')
@@ -382,9 +387,10 @@ function Resolve-CfgValue($entryDir, $cfgDir, $val) {
     return $p1
 }
 
-# The Launch target the launcher would pick for one Entry on this PC
-# (resolve_launch_target), or $null. '' means a shortcut whose target can't
-# be read: Available, but pointing nowhere we can tell.
+# The Launch target the launcher would pick for one Entry on this PC, or
+# $null. '' means a shortcut whose target can't be read: Available, but
+# pointing nowhere we can tell. Mirrors resolve_launch_target in
+# src/library.c rule for rule: change both together.
 function Resolve-EntryTarget($entryDir, $installs) {
     $name = Split-Path -Leaf $entryDir
     $links = New-Object System.Collections.Generic.List[string]
@@ -415,13 +421,9 @@ function Resolve-EntryTarget($entryDir, $installs) {
     $cfgExe = $null; $cfgExeRel = $null
     if ($cfgPath) {
         $cfgDir = Split-Path -Parent $cfgPath
-        foreach ($line in Get-Content -LiteralPath $cfgPath) {
-            $t = $line.Trim()
-            if (-not $t -or $t.StartsWith('#') -or $t.StartsWith(';')) { continue }
-            $eq = $t.IndexOf('=')
-            if ($eq -lt 1) { continue }
-            $k = $t.Substring(0, $eq).Trim()
-            $v = $t.Substring($eq + 1).Trim()
+        foreach ($p in (Read-KeyValueFile $cfgPath)) {
+            $k = $p.Key
+            $v = $p.Value
             if (-not $v) { continue }
             if ($k -ieq 'exe') {
                 $cfgExe = Resolve-CfgValue $entryDir $cfgDir $v

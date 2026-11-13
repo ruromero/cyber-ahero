@@ -86,6 +86,9 @@ static int is_meta_stem(const char *filename)
            ci_equal(base, "details");
 }
 
+/* How likely an executable is to be the game. Mirrored in tools/scrape.ps1
+ * (Get-ExeScore), which discovery uses to pick an Installation's
+ * executable: change both together. */
 static int score_exe(const char *filename, const char *game_name)
 {
     char base[256];
@@ -133,7 +136,7 @@ static int score_exe(const char *filename, const char *game_name)
 }
 
 /* Everything found while scanning one Entry folder. */
-/* What the scan knows about this laptop (ticket 02). */
+/* What the scan knows about this laptop. */
 typedef struct Laptop {
     const LaptopConfig *cfg;
     char **installs;   /* Install folders, in listed order */
@@ -478,13 +481,16 @@ static void scan_nested_launchers(Scan *s, const char *dir)
 }
 
 /* A relative exe= joined to each Install folder in listed order; the first
- * that exists, or NULL. */
-static char *find_in_installs(Scan *s, const char *rel)
+ * that exists, or NULL. *number (may be NULL) gets its 1-based position. */
+static char *find_in_installs(Scan *s, const char *rel, int *number)
 {
     for (int i = 0; s->laptop->installs[i]; i++) {
         char *p = path_join(s->laptop->installs[i], rel);
-        if (fs_exists(s, p))
+        if (fs_exists(s, p)) {
+            if (number)
+                *number = i + 1;
             return p;
+        }
         free(p);
     }
     return NULL;
@@ -560,12 +566,15 @@ static char *search_installs_by_name(Scan *s, const char *rel)
  *   1. the per-laptop override exe.<Entry folder name>= that exists;
  *   2. an absolute exe= that exists;
  *   3. a relative exe= in each Install folder, in listed order, then (kept
- *      from ticket 01) relative to the Entry folder or its juego.cfg;
+ *      from the first Library rules) relative to the Entry folder or its juego.cfg;
  *   4. the file name of a relative exe= searched up to two folder levels
  *      deep inside each Install folder, in listed order;
  *   5. a shortcut whose target exists or can't be read;
  *   6. the automatic executable inside the Entry folder.
- * Returns 1 when one was found; otherwise sets *reason. */
+ * Returns 1 when one was found (g->rule says which); otherwise sets *reason.
+ *
+ * Mirrored in tools/scrape.ps1 (Resolve-EntryTarget), which discovery uses
+ * to tell which Installations already have an Entry: change both together. */
 static int resolve_launch_target(Scan *s, HiddenReason *reason)
 {
     Game *g = &s->g;
@@ -576,13 +585,15 @@ static int resolve_launch_target(Scan *s, HiddenReason *reason)
         had_info = 1;
         if (fs_exists(s, over)) {
             g->exe = xstrdup(over);
+            g->rule = RULE_OVERRIDE;
             return 1;
         }
     }
     if (s->cfg_exe_rel) {
-        char *p = find_in_installs(s, s->cfg_exe_rel);
+        char *p = find_in_installs(s, s->cfg_exe_rel, &g->rule_install);
         if (p) {
             g->exe = p;
+            g->rule = RULE_EXE_INSTALL;
             return 1;
         }
     }
@@ -591,6 +602,7 @@ static int resolve_launch_target(Scan *s, HiddenReason *reason)
         if (fs_exists(s, s->cfg_exe)) {
             g->exe = s->cfg_exe;
             s->cfg_exe = NULL;
+            g->rule = s->cfg_exe_rel ? RULE_EXE_ENTRY : RULE_EXE_ABSOLUTE;
             return 1;
         }
     }
@@ -598,6 +610,7 @@ static int resolve_launch_target(Scan *s, HiddenReason *reason)
         char *p = search_installs_by_name(s, s->cfg_exe_rel);
         if (p) {
             g->exe = p;
+            g->rule = RULE_NAME_SEARCH;
             return 1;
         }
     }
@@ -610,6 +623,7 @@ static int resolve_launch_target(Scan *s, HiddenReason *reason)
         free(target);
         if (ok) {
             g->shortcut = xstrdup(s->links[i]);
+            g->rule = RULE_SHORTCUT;
             return 1;
         }
     }
@@ -617,6 +631,7 @@ static int resolve_launch_target(Scan *s, HiddenReason *reason)
         g->exe = s->auto_exe;
         g->exe_score = s->auto_score;
         s->auto_exe = NULL;
+        g->rule = RULE_AUTOMATIC;
         return 1;
     }
     *reason = had_info ? HIDDEN_NOT_FOUND : HIDDEN_NO_LAUNCH_INFO;
@@ -662,7 +677,7 @@ static void scan_free(Scan *s)
     free(s->cfg_con_dir);
 }
 
-/* Working folder of an executable Launch target (ticket 04). */
+/* Working folder of an executable Launch target. */
 static void resolve_work_dir(Scan *s)
 {
     Game *g = &s->g;
@@ -680,7 +695,7 @@ static void resolve_work_dir(Scan *s)
     }
 }
 
-/* The mapper helper's executable (ticket 09), resolved like exe=: absolute
+/* The mapper helper's executable, resolved like exe=: absolute
  * as-is; a relative con= in each Install folder in listed order, then
  * relative to the Entry folder or its juego.cfg, then its file name searched
  * two levels deep in the Install folders. When none exists the Entry-relative
@@ -695,7 +710,7 @@ static void resolve_con(Scan *s)
         s->g.con = xstrdup(v);
         return;
     }
-    if ((s->g.con = find_in_installs(s, v)) != NULL)
+    if ((s->g.con = find_in_installs(s, v, NULL)) != NULL)
         return;
     char *p = resolve_cfg_value(s, s->cfg_con_dir, v);
     if (!fs_exists(s, p)) {
@@ -722,13 +737,34 @@ static int hidden_cmp(const void *a, const void *b)
     return _stricmp(ha->name, hb->name);
 }
 
-static void add_hidden(Library *lib, Game *g, HiddenReason reason)
+static char *xstrdup_or_null(const char *s)
+{
+    return s ? xstrdup(s) : NULL;
+}
+
+static void add_hidden(Library *lib, const Scan *s, HiddenReason reason)
 {
     lib->hidden = xrealloc(lib->hidden, (size_t)(lib->hidden_count + 1) * sizeof(HiddenEntry));
     HiddenEntry *h = &lib->hidden[lib->hidden_count++];
-    h->name = xstrdup(g->name);
-    h->dir = xstrdup(g->dir);
+    h->name = xstrdup(s->g.name);
+    h->dir = xstrdup(s->g.dir);
     h->reason = reason;
+    h->exe = xstrdup_or_null(s->cfg_exe_rel ? s->cfg_exe_rel : s->cfg_exe);
+    h->exe_override = xstrdup_or_null(
+        laptop_config_exe_override(s->laptop->cfg, path_basename(s->g.dir)));
+}
+
+LaunchTarget game_launch_target(const Game *g)
+{
+    LaunchTarget t;
+    t.exe = g->exe;
+    t.shortcut = g->exe ? NULL : g->shortcut;
+    t.args = g->args;
+    t.work_dir = g->work_dir;
+    t.wait = g->wait;
+    t.con = g->con;
+    t.con_args = g->con_args;
+    return t;
 }
 
 Library *library_scan(const Fs *fs, const char *root, const struct LaptopConfig *cfg)
@@ -768,7 +804,7 @@ Library *library_scan(const Fs *fs, const char *root, const struct LaptopConfig 
             lib->games = xrealloc(lib->games, (size_t)(lib->count + 1) * sizeof(Game));
             lib->games[lib->count++] = s.g;
         } else {
-            add_hidden(lib, &s.g, reason);
+            add_hidden(lib, &s, reason);
             game_free(&s.g);
         }
         scan_free(&s);
@@ -795,6 +831,8 @@ void library_free(Library *lib)
     for (int i = 0; i < lib->hidden_count; i++) {
         free(lib->hidden[i].name);
         free(lib->hidden[i].dir);
+        free(lib->hidden[i].exe);
+        free(lib->hidden[i].exe_override);
     }
     free(lib->games);
     free(lib->hidden);

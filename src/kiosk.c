@@ -154,32 +154,3 @@ int kiosk_recover(const KioskApi *api)
     api->stop_launchers(api->ctx);
     return kiosk_leave(api);
 }
-
-/* ---- log ------------------------------------------------------------------ */
-
-void kiosk_log_line(char *buf, size_t n, const KioskTime *t, const char *msg)
-{
-    if (n < 3) {
-        if (n)
-            buf[0] = 0;
-        return;
-    }
-    snprintf(buf, n - 2, "%04d-%02d-%02d %02d:%02d:%02d  %s", t->year, t->month, t->day,
-             t->hour, t->minute, t->second, msg ? msg : "");
-    strcat(buf, "\r\n");
-}
-
-void kiosk_game_msg(char *buf, size_t n, KioskGameEvent ev, const char *game)
-{
-    switch (ev) {
-    case KIOSK_GAME_STARTED:
-        snprintf(buf, n, "Juego iniciado: %s", game);
-        break;
-    case KIOSK_GAME_ENDED:
-        snprintf(buf, n, "Juego terminado: %s", game);
-        break;
-    default:
-        snprintf(buf, n, "ERROR: no se pudo iniciar %s", game);
-        break;
-    }
-}

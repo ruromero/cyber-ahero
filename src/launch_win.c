@@ -1,13 +1,13 @@
-/* Win32 processes for launch.c (ticket 04). XP-compatible APIs only:
- * CreateProcessA, ShellExecuteExA, CreateToolhelp32Snapshot,
- * MsgWaitForMultipleObjects; for the mapper helper (ticket 09) EnumWindows,
+/* Win32 processes for launch.c. XP-compatible APIs only: CreateProcessA and
+ * Toolhelp process lists (winproc.c), ShellExecuteExA,
+ * MsgWaitForMultipleObjects; for the mapper helper EnumWindows,
  * GetWindowThreadProcessId, PostMessageA and TerminateProcess. */
 #include "launch.h"
 #include "util.h"
+#include "winproc.h"
 
 #include <windows.h>
 #include <shellapi.h>
-#include <tlhelp32.h>
 
 #include <stdlib.h>
 #include <string.h>
@@ -57,18 +57,7 @@ static ProcHandle w_start_exe(void *ctx, const char *exe, const char *cmdline,
                               const char *work_dir)
 {
     (void)ctx;
-    char *cmd = xstrdup(cmdline); /* CreateProcessA may write to it */
-    STARTUPINFOA si;
-    PROCESS_INFORMATION pi;
-    memset(&si, 0, sizeof(si));
-    si.cb = sizeof(si);
-    memset(&pi, 0, sizeof(pi));
-    BOOL ok = CreateProcessA(exe, cmd, NULL, NULL, FALSE, 0, NULL, work_dir, &si, &pi);
-    free(cmd);
-    if (!ok)
-        return NULL;
-    CloseHandle(pi.hThread);
-    return pi.hProcess;
+    return winproc_spawn(exe, cmdline, work_dir, NULL);
 }
 
 static int w_open_shell(void *ctx, const char *path, const char *args, const char *work_dir,
@@ -91,24 +80,18 @@ static int w_open_shell(void *ctx, const char *path, const char *args, const cha
     return 1;
 }
 
+static int open_first(void *user, DWORD pid)
+{
+    HANDLE *found = user;
+    *found = OpenProcess(SYNCHRONIZE, FALSE, pid);
+    return *found == NULL; /* keep looking only if it couldn't be opened */
+}
+
 static ProcHandle w_find_process(void *ctx, const char *exe_name)
 {
     (void)ctx;
-    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-    if (snap == INVALID_HANDLE_VALUE)
-        return NULL;
-    PROCESSENTRY32 pe;
-    memset(&pe, 0, sizeof(pe));
-    pe.dwSize = sizeof(pe);
     HANDLE found = NULL;
-    DWORD self = GetCurrentProcessId();
-    for (BOOL more = Process32First(snap, &pe); more && !found; more = Process32Next(snap, &pe)) {
-        if (pe.th32ProcessID == self)
-            continue;
-        if (_stricmp(path_basename(pe.szExeFile), exe_name) == 0)
-            found = OpenProcess(SYNCHRONIZE, FALSE, pe.th32ProcessID);
-    }
-    CloseHandle(snap);
+    winproc_each_named(exe_name, open_first, &found);
     return found;
 }
 
@@ -137,7 +120,7 @@ static void w_close(void *ctx, ProcHandle proc)
         CloseHandle((HANDLE)proc);
 }
 
-/* --- Mapper helper (ticket 09) --- */
+/* --- Mapper helper --- */
 
 /* How long the helper gets to close on its own before it is ended. */
 #define HELPER_CLOSE_MS 2000
@@ -151,20 +134,13 @@ static ProcHandle w_start_helper(void *ctx, const char *exe, const char *cmdline
                                  const char *work_dir)
 {
     (void)ctx;
-    char *cmd = xstrdup(cmdline);
-    STARTUPINFOA si;
-    PROCESS_INFORMATION pi;
-    memset(&si, 0, sizeof(si));
-    si.cb = sizeof(si);
-    memset(&pi, 0, sizeof(pi));
-    BOOL ok = CreateProcessA(exe, cmd, NULL, NULL, FALSE, 0, NULL, work_dir, &si, &pi);
-    free(cmd);
-    if (!ok)
+    DWORD pid = 0;
+    HANDLE proc = winproc_spawn(exe, cmdline, work_dir, &pid);
+    if (!proc)
         return NULL;
-    CloseHandle(pi.hThread);
     Helper *h = xmalloc(sizeof(Helper));
-    h->proc = pi.hProcess;
-    h->pid = pi.dwProcessId;
+    h->proc = proc;
+    h->pid = pid;
     return h;
 }
 

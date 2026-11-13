@@ -36,3 +36,4 @@ A dry run prints the planned Entries without writing. Existing Entries are only 
   - "A written Entry is Available in the launcher on another laptop" was checked only through the script's mirror of the launcher's rules (the written Entry covers the same folder under another Install folder). A run of the real launcher on a second laptop is still needed, so the criterion stays unticked.
   - Windows PowerShell 5.1 itself wasn't run. The script avoids PS7-only syntax and parses cleanly, but a run on Windows (paths with `\` and drive letters, `.lnk` targets through `WScript.Shell`, which off Windows count as unreadable) is still needed.
   - The real IGDB/SteamGridDB lookups and `-Video` (yt-dlp + ffmpeg) in discovery mode.
+- Pending manual check on Windows: A written Entry is Available in the launcher on another laptop whose Install folder has the game under the same folder name.

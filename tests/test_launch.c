@@ -24,7 +24,7 @@ typedef struct Fake {
     char searched[64];
     int events[16];          /* 'S' started, 'W' wait, in order */
     int event_count;
-    /* mapper helper (ticket 09) */
+    /* mapper helper */
     int helper_ok;           /* start_helper succeeds */
     char helper_exe[260], helper_cmdline[512], helper_dir[260];
     int helper_starts, helper_stops;
@@ -331,7 +331,7 @@ static void test_no_launch_target_fails(void)
     free(f);
 }
 
-/* --- Gamepad mapper helper (ticket 09) --- */
+/* --- Gamepad mapper helper --- */
 
 static void test_mapper_helper_starts_just_before_the_game_and_stops_after_it(void)
 {

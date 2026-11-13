@@ -256,7 +256,7 @@ static void test_entries_and_hidden_entries_are_sorted_by_name(void)
     fake_fs_free(fs);
 }
 
-/* --- One Library for every laptop (ticket 02) --- */
+/* --- One Library for every laptop --- */
 
 #define LAPTOP "installs=C:\\Juegos;D:\\Games\n"
 
@@ -424,7 +424,7 @@ static void test_absolute_exe_and_shortcuts_still_work_with_install_folders(void
     fake_fs_free(fs);
 }
 
-/* --- Launching options (ticket 04) --- */
+/* --- Launching options --- */
 
 static void test_entry_carries_its_launch_arguments(void)
 {
@@ -540,7 +540,7 @@ static void test_entry_names_the_process_to_wait_for(void)
     fake_fs_free(fs);
 }
 
-/* --- Gamepad mapper helper (ticket 09) --- */
+/* --- Gamepad mapper helper --- */
 
 static void test_entry_names_its_mapper_helper_and_its_arguments(void)
 {
@@ -651,8 +651,152 @@ static void test_entry_without_mapper_helper_has_none(void)
     fake_fs_free(fs);
 }
 
+/* --- Which rule found the Launch target (troubleshooting log) --- */
+
+static void check_rule(const char *laptop_cfg, FakeFs *fs, TargetRule rule, int install)
+{
+    Library *lib = scan_with(fs, laptop_cfg);
+    CHECK_INT(lib->count, 1);
+    if (lib->count == 1) {
+        CHECK_INT(lib->games[0].rule, rule);
+        CHECK_INT(lib->games[0].rule_install, install);
+    }
+    library_free(lib);
+    fake_fs_free(fs);
+}
+
+static void test_override_is_reported_as_the_rule(void)
+{
+    FakeFs *fs = fake_fs_new();
+    fake_fs_file(fs, ROOT "\\Quake III\\juego.cfg", "exe=Quake3\\quake3.exe\n");
+    fake_fs_file(fs, "E:\\Raro\\quake3.exe", NULL);
+    check_rule(LAPTOP "exe.Quake III=E:\\Raro\\quake3.exe\n", fs, RULE_OVERRIDE, 0);
+}
+
+static void test_absolute_exe_is_reported_as_the_rule(void)
+{
+    FakeFs *fs = fake_fs_new();
+    fake_fs_file(fs, ROOT "\\Worms\\juego.cfg", "exe=F:\\Worms\\worms.exe\n");
+    fake_fs_file(fs, "F:\\Worms\\worms.exe", NULL);
+    check_rule(LAPTOP, fs, RULE_EXE_ABSOLUTE, 0);
+}
+
+static void test_install_folder_number_is_reported_for_a_relative_exe(void)
+{
+    FakeFs *fs = fake_fs_new();
+    fake_fs_file(fs, ROOT "\\Quake III\\juego.cfg", "exe=Quake3\\quake3.exe\n");
+    fake_fs_file(fs, "D:\\Games\\Quake3\\quake3.exe", NULL);
+    check_rule(LAPTOP, fs, RULE_EXE_INSTALL, 2);
+}
+
+static void test_relative_exe_in_the_entry_folder_is_reported_as_the_rule(void)
+{
+    FakeFs *fs = fake_fs_new();
+    fake_fs_file(fs, ROOT "\\Action Puzzle\\juego.cfg", "exe=AP\\ActionPuzzle.exe\n");
+    fake_fs_file(fs, ROOT "\\Action Puzzle\\AP\\ActionPuzzle.exe", NULL);
+    check_rule(LAPTOP, fs, RULE_EXE_ENTRY, 0);
+}
+
+static void test_name_search_is_reported_as_the_rule(void)
+{
+    FakeFs *fs = fake_fs_new();
+    fake_fs_file(fs, ROOT "\\Quake III\\juego.cfg", "exe=Quake3\\quake3.exe\n");
+    fake_fs_file(fs, "D:\\Games\\Quake 3 Arena\\quake3.exe", NULL);
+    check_rule(LAPTOP, fs, RULE_NAME_SEARCH, 0);
+}
+
+static void test_shortcut_is_reported_as_the_rule(void)
+{
+    FakeFs *fs = fake_fs_new();
+    fake_fs_shortcut(fs, ROOT "\\Doom\\Doom.lnk", "F:\\Doom\\doom.exe");
+    fake_fs_file(fs, "F:\\Doom\\doom.exe", NULL);
+    check_rule(LAPTOP, fs, RULE_SHORTCUT, 0);
+}
+
+static void test_automatic_choice_is_reported_as_the_rule(void)
+{
+    FakeFs *fs = fake_fs_new();
+    fake_fs_file(fs, ROOT "\\Worms\\worms.exe", NULL);
+    check_rule(LAPTOP, fs, RULE_AUTOMATIC, 0);
+}
+
+static void test_hidden_entry_reports_the_exe_it_looked_for(void)
+{
+    FakeFs *fs = fake_fs_new();
+    fake_fs_file(fs, ROOT "\\Quake III\\juego.cfg", "exe=Quake3\\quake3.exe\n");
+    fake_fs_file(fs, ROOT "\\Doom\\cover.png", NULL);
+
+    Library *lib = scan_with(fs, LAPTOP "exe.Quake III=E:\\Raro\\quake3.exe\n");
+
+    CHECK_INT(lib->hidden_count, 2);
+    if (lib->hidden_count == 2) {
+        CHECK_STR(lib->hidden[0].name, "Doom");
+        CHECK_STR(lib->hidden[0].exe, NULL);
+        CHECK_STR(lib->hidden[0].exe_override, NULL);
+        CHECK_STR(lib->hidden[1].name, "Quake III");
+        CHECK_STR(lib->hidden[1].exe, "Quake3\\quake3.exe");
+        CHECK_STR(lib->hidden[1].exe_override, "E:\\Raro\\quake3.exe");
+    }
+    library_free(lib);
+    fake_fs_free(fs);
+}
+
+static void test_launch_target_of_an_entry_carries_everything_to_start_it(void)
+{
+    FakeFs *fs = fake_fs_new();
+    fake_fs_file(fs, ROOT "\\Worms\\juego.cfg",
+                 "exe=Worms\\worms.exe\nargs=-nointro\nwait=wa.exe\n"
+                 "con=C:\\Pad\\JoyToKey.exe\ncon_args=Worms\n");
+    fake_fs_file(fs, "C:\\Juegos\\Worms\\worms.exe", NULL);
+
+    Library *lib = scan_with(fs, LAPTOP);
+
+    CHECK_INT(lib->count, 1);
+    if (lib->count == 1) {
+        LaunchTarget t = game_launch_target(&lib->games[0]);
+        CHECK_STR(t.exe, "C:\\Juegos\\Worms\\worms.exe");
+        CHECK_STR(t.shortcut, NULL);
+        CHECK_STR(t.args, "-nointro");
+        CHECK_STR(t.work_dir, "C:\\Juegos\\Worms");
+        CHECK_STR(t.wait, "wa.exe");
+        CHECK_STR(t.con, "C:\\Pad\\JoyToKey.exe");
+        CHECK_STR(t.con_args, "Worms");
+    }
+    library_free(lib);
+    fake_fs_free(fs);
+}
+
+static void test_launch_target_of_a_shortcut_entry_opens_the_shortcut(void)
+{
+    FakeFs *fs = fake_fs_new();
+    fake_fs_shortcut(fs, ROOT "\\Doom\\Doom.lnk", "F:\\Doom\\doom.exe");
+    fake_fs_file(fs, "F:\\Doom\\doom.exe", NULL);
+
+    Library *lib = scan_with(fs, LAPTOP);
+
+    CHECK_INT(lib->count, 1);
+    if (lib->count == 1) {
+        LaunchTarget t = game_launch_target(&lib->games[0]);
+        CHECK_STR(t.exe, NULL);
+        CHECK_STR(t.shortcut, ROOT "\\Doom\\Doom.lnk");
+        CHECK_STR(t.work_dir, NULL);
+    }
+    library_free(lib);
+    fake_fs_free(fs);
+}
+
 int main(void)
 {
+    RUN_TEST(test_override_is_reported_as_the_rule);
+    RUN_TEST(test_absolute_exe_is_reported_as_the_rule);
+    RUN_TEST(test_install_folder_number_is_reported_for_a_relative_exe);
+    RUN_TEST(test_relative_exe_in_the_entry_folder_is_reported_as_the_rule);
+    RUN_TEST(test_name_search_is_reported_as_the_rule);
+    RUN_TEST(test_shortcut_is_reported_as_the_rule);
+    RUN_TEST(test_automatic_choice_is_reported_as_the_rule);
+    RUN_TEST(test_hidden_entry_reports_the_exe_it_looked_for);
+    RUN_TEST(test_launch_target_of_an_entry_carries_everything_to_start_it);
+    RUN_TEST(test_launch_target_of_a_shortcut_entry_opens_the_shortcut);
     RUN_TEST(test_differently_installed_mapper_helper_is_found_by_file_name);
     RUN_TEST(test_missing_mapper_helper_keeps_the_entry_available);
     RUN_TEST(test_entry_without_mapper_helper_has_none);

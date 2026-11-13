@@ -2,7 +2,7 @@
 #define CYBER_ATTRACT_H
 
 /*
- * Attract mode timing (ticket 10). Portable (no SDL): ticks are millisecond
+ * Attract mode timing. Portable (no SDL): ticks are millisecond
  * counters like SDL_GetTicks() and may wrap around.
  *
  * The menu loop drives it:
@@ -14,7 +14,7 @@
  *   attract_shown(&at, has_preview)   after opening that Entry: preview or
  *                                  cover only (decides 20 s vs 8 s)
  *   attract_preview_ended(&at)     the preview reached its end
- *   attract_game_running(&at, r, now)  hook for the launcher (ticket 04):
+ *   attract_game_running(&at, r, now)  hook for the launcher:
  *                                  Attract mode never starts while r != 0
  *   attract_deadline(&at, &when)   for the redraw wait: next time-driven change
  */

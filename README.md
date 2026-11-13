@@ -282,6 +282,39 @@ del ratón o con los botones `^` y `v`. Todo se maneja solo con el ratón.
 instalar un juego o arreglar su `juego.cfg`, pulsarlo basta para verlo, sin
 reiniciar el launcher. Fuera del modo kiosko, **F5** hace lo mismo desde
 cualquier pantalla. **Cerrar**, Esc o un clic fuera del recuadro vuelven al menú.
+El aviso «Biblioteca reescaneada: N juegos» solo sale al reescanear a mano; al
+volver de un juego la biblioteca se reescanea sin avisar.
+
+### Registro para diagnosticar (`cyber.log`)
+
+El launcher escribe un registro de texto plano, **`cyber.log`**, junto a
+`cyber_ahero.exe`, tanto en ventana normal como en modo kiosko. Se va añadiendo
+entre ejecuciones (si el launcher se cuelga y vuelve a arrancar, lo anterior
+sigue ahí). Cuando pasa de 1 MB aproximadamente se renombra a
+**`cyber.old.log`** (sustituyendo al anterior) y se empieza uno nuevo. Cada
+línea lleva fecha y hora. Contiene:
+
+- **cada escaneo** (al arrancar, al volver de un juego y al reescanear a mano):
+  cada juego disponible con la ruta completa de lo que va a lanzar y qué regla
+  lo encontró (`exe.<carpeta>=` de `cyber.cfg`, `exe=` absoluto, `exe=`
+  relativo en la carpeta de instalación N, `exe=` relativo en la carpeta del
+  juego, búsqueda por nombre en las carpetas de instalación, acceso directo o
+  elección automática); y cada juego oculto con el motivo y el `exe=` (y el
+  `exe.<carpeta>=`) que buscaba;
+- **cada partida**: juego iniciado, terminado o que no se pudo iniciar, con la
+  ruta exacta lanzada, sus argumentos, la carpeta de trabajo y, si se usan,
+  `wait=` y el mapeador `con=`;
+- en modo kiosko, además, lo que hace el kiosko (ver [Modo kiosko](#modo-kiosko)).
+
+Ejemplo:
+
+```
+2026-11-13 21:04:10  Escaneo de la biblioteca (inicio): C:\Cyber\games
+2026-11-13 21:04:10    Disponible: Quake III -> D:\Juegos\Quake3\quake3.exe (exe= relativo, carpeta de instalacion 2)
+2026-11-13 21:04:10    Oculto: Diablo II: instalacion no encontrada (buscaba exe=Diablo II\Game.exe)
+2026-11-13 21:04:10  Escaneo terminado: 1 disponibles, 1 ocultos
+2026-11-13 21:05:32  Juego iniciado: Quake III -> D:\Juegos\Quake3\quake3.exe +set fs_game baseq3 (carpeta D:\Juegos\Quake3)
+```
 
 ## Elegir la ruta de la biblioteca
 
@@ -543,8 +576,11 @@ y en un portátil moderno de 64 bits.
   con la que se ejecuta: usa la misma cuenta que el kiosko.
 - Sin administrador, el modo kiosko arranca igual con lo que se pueda
   aplicar; el registro dice qué ajustes no se aplicaron.
-- Registro: **`kiosko.log`** junto al `.exe` (texto plano; se va añadiendo):
-  ajustes aplicados y deshechos, juegos iniciados y terminados, y fallos.
+- Registro: el modo kiosko escribe en **`cyber.log`** junto al `.exe` (ver
+  [Registro para diagnosticar](#registro-para-diagnosticar-cyberlog)), que
+  sustituye al antiguo `kiosko.log`: ajustes aplicados y deshechos (y cuáles
+  no se pudieron aplicar sin administrador), Salir, la recuperación, además
+  de los escaneos y las partidas como en ventana normal.
 
 Sin `--kiosko`, el launcher es una ventana normal: el botón Salir y Esc
 simplemente cierran, y F5 reescanea.
