@@ -1,1 +1,5 @@
 library=games
+# Carpetas de instalacion de este portatil, separadas por ';', en orden:
+# installs=C:\Juegos;D:\Games
+# Override de un juego en este portatil (gana a todo):
+# exe.Quake III=C:\Archivos de programa\Quake III Arena\quake3.exe

@@ -65,20 +65,25 @@ games/
     descripcion.txt       <- texto libre (opcional)
     juego.cfg             <- opciones del juego (opcional, ver más abajo)
   Doom/
-    juego.cfg             <- exe=D:\Juegos\Doom\doom.exe (sin acceso directo)
+    juego.cfg             <- exe=Doom\doom.exe (relativo a las carpetas de instalación)
     cover.png
     details.txt
     preview.mpg
 ```
 
-Para lanzar el juego se elige, dentro de `games/<Nombre>/`, el primero que
-funcione de estos:
+Para lanzar el juego se elige el primero que funcione de estos (ver
+[Una biblioteca para todos los portátiles](#una-biblioteca-para-todos-los-portátiles)):
 
-1. el `exe=` de su `juego.cfg`, si ese archivo existe;
-2. cualquier **acceso directo** (`*.lnk`, con el nombre que sea) cuyo destino
-   existe en este portátil;
-3. un **`.exe`** de la carpeta (se elige el que más se parece al nombre de la
-   carpeta y se descartan instaladores/servidores dedicados).
+1. el **override** de este portátil, `exe.<carpeta>=` en `cyber.cfg`;
+2. el `exe=` de su `juego.cfg` si es una ruta absoluta y existe;
+3. el `exe=` relativo, probado en cada carpeta de `installs=` en el orden
+   escrito (y después respecto a la carpeta del juego);
+4. el nombre de ese ejecutable buscado hasta dos niveles de carpetas dentro de
+   cada carpeta de `installs=`, en el orden escrito;
+5. cualquier **acceso directo** (`*.lnk`, con el nombre que sea) de
+   `games/<Nombre>/` cuyo destino existe en este portátil;
+6. un **`.exe`** de la carpeta del juego (se elige el que más se parece al
+   nombre de la carpeta y se descartan instaladores/servidores dedicados).
 
 Si el juego vive en una **subcarpeta** (por ejemplo
 `games/<Nombre>/<Nombre>/Juego.exe`), también se buscan ahí el `.lnk` o el
@@ -124,8 +129,11 @@ se usa el icono por defecto.
 ## Indicar el ejecutable de un juego (`juego.cfg`)
 
 Si el lanzador no encuentra el `.exe` correcto (o el juego necesita otro), pon
-un archivo **`juego.cfg`** dentro de la carpeta del juego. Las rutas se
-resuelven respecto a la carpeta del juego (se aceptan rutas absolutas) y las líneas con `#` o `;` son comentarios:
+un archivo **`juego.cfg`** dentro de la carpeta del juego. Un `exe=` relativo
+se busca primero en las carpetas de instalación (`installs=`, ver la sección
+siguiente) y luego en la carpeta del juego; las demás rutas se resuelven
+respecto a la carpeta del juego (se aceptan rutas absolutas). Las líneas con
+`#` o `;` son comentarios:
 
 ```
 # Opciones del juego (ejemplo)
@@ -141,6 +149,50 @@ Si el archivo de `exe` existe, gana siempre a los accesos directos y a la
 detección automática. Con esto no hace falta ni `.lnk` ni que el `.exe` se llame
 parecido a la carpeta. Si no existe, se prueban los accesos directos y la
 detección automática; si nada funciona, el juego se oculta.
+
+## Una biblioteca para todos los portátiles
+
+La misma carpeta `games` (la biblioteca maestra) se copia tal cual a todos los
+portátiles. Lo que cambia en cada uno es su `cyber.cfg`, que dice dónde están
+instalados los juegos **en ese portátil**:
+
+- `installs=` lista las carpetas de instalación, separadas por `;`, en orden de
+  preferencia;
+- en `juego.cfg`, `exe=` se escribe **relativo** a esas carpetas
+  (`exe=Quake3\quake3.exe`). Se prueba en cada carpeta de `installs=` en el
+  orden escrito: si el juego está en dos, gana la primera;
+- si no está con esa ruta (por ejemplo, la carpeta se llama distinto en este
+  portátil, `Quake 3 Arena\quake3.exe`), se busca el **nombre del ejecutable**
+  (`quake3.exe`) hasta **dos niveles** de carpetas dentro de cada carpeta de
+  instalación, en el orden escrito. Más abajo no se busca, para que el arranque
+  siga siendo rápido en los portátiles antiguos;
+- si no aparece en ninguna, el juego se oculta (*instalación no encontrada*);
+- las rutas absolutas en `exe=` y los accesos directos siguen funcionando;
+- **override** por portátil: `exe.<nombre de la carpeta del juego>=<ruta
+  absoluta>` en `cyber.cfg` gana a todo lo demás, para un juego instalado en un
+  sitio raro sin tocar la biblioteca compartida.
+
+Ejemplo: `games/Quake III/juego.cfg` contiene `exe=Quake3\quake3.exe`.
+
+```
+# cyber.cfg del portátil moderno (juegos en dos discos)
+library=games
+installs=C:\Juegos;D:\Games
+```
+
+Aquí se lanza `C:\Juegos\Quake3\quake3.exe`, o `D:\Games\Quake3\quake3.exe`
+si no está en `C:`.
+
+```
+# cyber.cfg del portátil con XP (otra unidad, otra carpeta)
+library=games
+installs=E:\JUEGOS
+exe.Quake III=C:\Archivos de programa\Quake III Arena\quake3.exe
+```
+
+Aquí el override manda: se lanza el Quake instalado con su instalador. Sin esa
+línea se encontraría también `E:\JUEGOS\Quake 3 Arena\quake3.exe` gracias a
+la búsqueda por nombre.
 
 ## Elegir la ruta de la biblioteca
 
