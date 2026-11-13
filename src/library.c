@@ -154,6 +154,7 @@ typedef struct Scan {
     int auto_score;
     char *cfg_exe;     /* exe= from juego.cfg, resolved but maybe missing */
     char *cfg_exe_rel; /* exe= as written, when it is a relative path */
+    char *cfg_dir;     /* dir= as written */
 } Scan;
 
 static void add_link(Scan *s, const char *path, int first)
@@ -336,6 +337,15 @@ static void apply_cfg_value(Scan *s, const char *cfg_dir, const char *key, const
     } else if (_stricmp(key, "video") == 0 || _stricmp(key, "preview") == 0) {
         free(g->video);
         g->video = resolve_cfg_value(s, cfg_dir, val);
+    } else if (_stricmp(key, "args") == 0) {
+        free(g->args);
+        g->args = xstrdup(val);
+    } else if (_stricmp(key, "dir") == 0) {
+        free(s->cfg_dir);
+        s->cfg_dir = xstrdup(val);
+    } else if (_stricmp(key, "wait") == 0) {
+        free(g->wait);
+        g->wait = xstrdup(val);
     } else if (_stricmp(key, "descripcion") == 0 || _stricmp(key, "desc") == 0) {
         free(g->desc_path);
         g->desc_path = resolve_cfg_value(s, cfg_dir, val);
@@ -616,6 +626,9 @@ static void game_free(Game *g)
     free(g->desc_text);
     free(g->meta_path);
     free(g->cfg_path);
+    free(g->args);
+    free(g->work_dir);
+    free(g->wait);
     for (int k = 0; k < g->meta_count; k++) {
         free(g->meta_keys[k]);
         free(g->meta_vals[k]);
@@ -632,6 +645,25 @@ static void scan_free(Scan *s)
     free(s->auto_exe);
     free(s->cfg_exe);
     free(s->cfg_exe_rel);
+    free(s->cfg_dir);
+}
+
+/* Working folder of an executable Launch target (ticket 04). */
+static void resolve_work_dir(Scan *s)
+{
+    Game *g = &s->g;
+    if (!g->exe)
+        return;
+    char *exe_dir = cfg_dir_of(g->exe);
+    if (!s->cfg_dir) {
+        g->work_dir = exe_dir;
+    } else if (path_is_absolute(s->cfg_dir)) {
+        g->work_dir = xstrdup(s->cfg_dir);
+        free(exe_dir);
+    } else {
+        g->work_dir = path_join(exe_dir, s->cfg_dir);
+        free(exe_dir);
+    }
 }
 
 static int game_cmp(const void *a, const void *b)
@@ -685,6 +717,7 @@ Library *library_scan(const Fs *fs, const char *root, const struct LaptopConfig 
 
         HiddenReason reason;
         if (resolve_launch_target(&s, &reason)) {
+            resolve_work_dir(&s);
             if (s.g.desc_path)
                 s.g.desc_text = fs->read_text(fs->ctx, s.g.desc_path);
             if (s.g.meta_path)

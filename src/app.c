@@ -2,7 +2,7 @@
 #include "library.h"
 #include "video.h"
 #include "text.h"
-#include "launcher.h"
+#include "launch.h"
 #include "util.h"
 #include "pad_sdl.h"
 #include "redraw.h"
@@ -65,6 +65,10 @@ typedef struct App {
 
     /* ticket 08: gamepad navigation */
     PadNav pads;
+
+    /* ticket 04: launching and rescanning */
+    char *lib_root;
+    const struct LaptopConfig *cfg;
 } App;
 
 /*
@@ -709,29 +713,93 @@ static void pad_menu_action(App *a, const SDL_Rect *grid, PadAction act)
     }
 }
 
+/* Per-Entry texture caches, sized to the current Library. */
+static void caches_alloc(App *a)
+{
+    int cap = a->lib->count > 0 ? a->lib->count : 1;
+    a->icons = calloc((size_t)cap, sizeof(SDL_Texture *));
+    a->icon_tried = calloc((size_t)cap, 1);
+    a->icons_w = calloc((size_t)cap, sizeof(int));
+    a->icons_h = calloc((size_t)cap, sizeof(int));
+    a->covers = calloc((size_t)cap, sizeof(SDL_Texture *));
+    a->cover_tried = calloc((size_t)cap, 1);
+    a->covers_w = calloc((size_t)cap, sizeof(int));
+    a->covers_h = calloc((size_t)cap, sizeof(int));
+}
+
+static void caches_free(App *a)
+{
+    for (int i = 0; i < a->lib->count; i++) {
+        if (a->icons[i])
+            SDL_DestroyTexture(a->icons[i]);
+        if (a->covers[i])
+            SDL_DestroyTexture(a->covers[i]);
+    }
+    free(a->icons);
+    free(a->icon_tried);
+    free(a->icons_w);
+    free(a->icons_h);
+    free(a->covers);
+    free(a->cover_tried);
+    free(a->covers_w);
+    free(a->covers_h);
+    a->icons = NULL;
+    a->covers = NULL;
+}
+
+/* Scans the Library again and starts the menu over with what is there now
+ * (after a game, F5 or the Organizer's rescan button). */
+static void app_rescan(App *a)
+{
+    stop_video(a);
+    caches_free(a);
+    library_free(a->lib);
+    a->lib = library_scan(fs_win(), a->lib_root, a->cfg);
+    caches_alloc(a);
+    a->selected = -1;
+    a->pinned = -1;
+    a->scroll = 0;
+}
+
+static void hide_menu(void *user)
+{
+    App *a = user;
+    SDL_HideWindow(a->win);
+}
+
+/* Starts the selected Entry and waits for it with the window hidden and
+ * nothing drawn; then the menu comes back with a fresh Library. */
 static void launch(App *a)
 {
     int i = a->selected;
     if (i < 0 || i >= a->lib->count)
         return;
     Game *g = &a->lib->games[i];
-    const char *target = g->shortcut ? g->shortcut : g->exe;
-    if (!target) {
-        app_status(a, "No hay lanzador (.lnk ni .exe) en la carpeta");
+    stop_video(a);
+    LaunchTarget t;
+    t.exe = g->exe;
+    t.shortcut = g->exe ? NULL : g->shortcut;
+    t.args = g->args;
+    t.work_dir = g->work_dir;
+    t.wait = g->wait;
+
+    LaunchResult r = launch_and_wait(proc_win(), &t, hide_menu, a);
+    if (r == LAUNCH_FAILED) {
+        char buf[300];
+        SDL_snprintf(buf, sizeof(buf), "No se pudo iniciar %s", g->name);
+        app_status(a, buf);
         return;
     }
-    if (launcher_open(target, g->dir) == 0) {
-        int sel = a->selected;
-        a->selected = -1;
-        a->pinned = -1;
-        stop_video(a);
-        a->leave_time = SDL_GetTicks() - 1000000;
-        char buf[300];
-        SDL_snprintf(buf, sizeof(buf), "Abriendo %s ...", g->name);
-        app_status(a, buf);
-    } else {
-        app_status(a, "No se pudo abrir el juego");
-    }
+
+    SDL_ShowWindow(a->win);
+    SDL_RaiseWindow(a->win);
+    /* input typed into the game must not reach the menu */
+    SDL_FlushEvents(SDL_KEYDOWN, SDL_MOUSEWHEEL);
+    SDL_FlushEvents(SDL_JOYAXISMOTION, SDL_JOYBUTTONUP);
+    SDL_FlushEvents(SDL_CONTROLLERAXISMOTION, SDL_CONTROLLERBUTTONUP);
+    app_rescan(a);
+    a->leave_time = SDL_GetTicks() - 1000000;
+    a->frame_last = SDL_GetTicks();
 }
 
 static void text_ellipsized(SDL_Renderer *ren, TTF_Font *f, const char *s, SDL_Color c, SDL_Rect box)
@@ -1162,16 +1230,10 @@ int app_run(const char *library_root, const struct LaptopConfig *cfg)
 
     app_metrics(&a);
 
+    a.lib_root = xstrdup(library_root);
+    a.cfg = cfg;
     a.lib = library_scan(fs_win(), library_root, cfg);
-    int cap = a.lib->count > 0 ? a.lib->count : 1;
-    a.icons = calloc((size_t)cap, sizeof(SDL_Texture *));
-    a.icon_tried = calloc((size_t)cap, 1);
-    a.icons_w = calloc((size_t)cap, sizeof(int));
-    a.icons_h = calloc((size_t)cap, sizeof(int));
-    a.covers = calloc((size_t)cap, sizeof(SDL_Texture *));
-    a.cover_tried = calloc((size_t)cap, 1);
-    a.covers_w = calloc((size_t)cap, sizeof(int));
-    a.covers_h = calloc((size_t)cap, sizeof(int));
+    caches_alloc(&a);
     a.theme = 0;
     theme_apply(a.theme);
     a.fonts = fonts_load(a.scale);
@@ -1318,24 +1380,12 @@ int app_run(const char *library_root, const struct LaptopConfig *cfg)
     }
 
     stop_video(&a);
-    for (int i = 0; i < a.lib->count; i++) {
-        if (a.icons[i])
-            SDL_DestroyTexture(a.icons[i]);
-        if (a.covers[i])
-            SDL_DestroyTexture(a.covers[i]);
-    }
-    free(a.icons);
-    free(a.icon_tried);
-    free(a.icons_w);
-    free(a.icons_h);
-    free(a.covers);
-    free(a.cover_tried);
-    free(a.covers_w);
-    free(a.covers_h);
+    caches_free(&a);
     fonts_free(a.fonts);
     if (a.def_icon)
         SDL_DestroyTexture(a.def_icon);
     library_free(a.lib);
+    free(a.lib_root);
     IMG_Quit();
     SDL_DestroyRenderer(ren);
     SDL_DestroyWindow(win);
