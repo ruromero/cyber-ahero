@@ -7,11 +7,11 @@ modern and Windows XP laptops. C99 + SDL2, Windows only; see README.md.
 
 ### Issue tracker
 
-Obsidian-style Markdown notes under `planning/<feature>/` (spec plus one note per ticket). See `docs/agents/issue-tracker.md`.
+GitHub Issues on `ruromero/cyber-ahero` via `gh`; specs are parent issues, tickets their sub-issues. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
-No triage labels; notes carry category tags only. See `docs/agents/triage-labels.md`.
+No triage labels; issues carry category labels only. See `docs/agents/triage-labels.md`.
 
 ### Domain docs
 
