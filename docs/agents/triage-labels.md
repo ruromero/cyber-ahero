@@ -3,9 +3,9 @@
 The triage roles (needs-triage, needs-info, ready-for-agent, ready-for-human, wontfix)
 are not used in this repo. When a skill says to apply a triage label, skip that step.
 
-Notes carry category tags instead, in the `tags:` frontmatter:
+Issues carry category labels instead (GitHub labels, all already created):
 
-| Tag | Covers |
+| Label | Covers |
 | --- | --- |
 | `library` | Entries, Install folders, Launch targets, the library scan and check |
 | `kiosk` | Kiosk mode: lockdown, launching and waiting, Quit and Organizer buttons |
@@ -15,4 +15,6 @@ Notes carry category tags instead, in the `tags:` frontmatter:
 | `build` | Toolchain, build and packaging scripts |
 | `docs` | README, glossary, ADRs |
 
-Add a tag here before using a new one.
+Plus `spec`, which marks a feature spec (the parent issue of its tickets).
+
+Add a label here, and create it with `gh label create`, before using a new one.
