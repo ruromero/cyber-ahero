@@ -22,4 +22,5 @@ function(cyber_test name)
 endfunction()
 
 cyber_test(test_util test_util.c ${CYBER_SRC}/util.c)
+cyber_test(test_pad test_pad.c ${CYBER_SRC}/pad.c)
 cyber_test(test_redraw test_redraw.c ${CYBER_SRC}/redraw.c)

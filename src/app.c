@@ -4,6 +4,7 @@
 #include "text.h"
 #include "launcher.h"
 #include "util.h"
+#include "pad_sdl.h"
 #include "redraw.h"
 
 #include <SDL.h>
@@ -61,6 +62,9 @@ typedef struct App {
     int title_h;
     int pad;
     int radius;
+
+    /* ticket 08: gamepad navigation */
+    PadNav pads;
 } App;
 
 /*
@@ -679,6 +683,32 @@ static void move_selection(App *a, const SDL_Rect *grid, int dx, int dy)
     scroll_into_view(a, grid, i);
 }
 
+static void launch(App *a);
+
+/* Gamepad: same effect as the arrow keys, Enter and Esc (without quitting). */
+static void pad_menu_action(App *a, const SDL_Rect *grid, PadAction act)
+{
+    if (act == PAD_ACT_NONE)
+        return;
+    a->mouse_active = 0;
+    switch (act) {
+    case PAD_ACT_LEFT:  move_selection(a, grid, -1, 0); a->pinned = a->selected; break;
+    case PAD_ACT_RIGHT: move_selection(a, grid, 1, 0);  a->pinned = a->selected; break;
+    case PAD_ACT_UP:    move_selection(a, grid, 0, -1); a->pinned = a->selected; break;
+    case PAD_ACT_DOWN:  move_selection(a, grid, 0, 1);  a->pinned = a->selected; break;
+    case PAD_ACT_LAUNCH:
+        launch(a);
+        a->selected = -1; a->pinned = -1;
+        break;
+    case PAD_ACT_CLOSE:
+        a->pinned = -1;
+        set_selected(a, -1);
+        break;
+    default:
+        break;
+    }
+}
+
 static void launch(App *a)
 {
     int i = a->selected;
@@ -1128,6 +1158,7 @@ int app_run(const char *library_root)
     a.selected = -1;
     a.pinned = -1;
     a.frame_last = SDL_GetTicks();
+    pad_sdl_init(&a.pads);
 
     app_metrics(&a);
 
@@ -1262,6 +1293,15 @@ int app_run(const char *library_root)
                 default:
                     break;
                 }
+                break;
+            case SDL_JOYDEVICEADDED:
+            case SDL_JOYDEVICEREMOVED:
+            case SDL_JOYBUTTONDOWN:
+            case SDL_JOYHATMOTION:
+            case SDL_JOYAXISMOTION:
+            case SDL_CONTROLLERBUTTONDOWN:
+            case SDL_CONTROLLERAXISMOTION:
+                pad_menu_action(&a, &grid, pad_sdl_event(&a.pads, &e));
                 break;
             default:
                 break;
