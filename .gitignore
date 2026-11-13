@@ -1,0 +1,20 @@
+# Build outputs and downloaded tools
+/build/
+/ciber_ahero/
+/dist/
+/deps/
+/_toolchain/
+*.o
+*.obj
+*.exe
+*.dll
+*.a
+
+# Local configuration and secrets
+/scrape.cfg
+/cyber.cfg
+
+# Logs and OS clutter
+*.log
+.DS_Store
+Thumbs.db

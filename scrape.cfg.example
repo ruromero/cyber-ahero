@@ -1,0 +1,11 @@
+# Copia este archivo como scrape.cfg y rellena tus claves.
+# scrape.cfg esta en .gitignore, no se sube al repositorio.
+
+# IGDB (obligatorio) - https://dev.twitch.tv/console/apps
+# Crea una aplicacion, copia el Client ID y genera un Client Secret.
+igdb_client_id=
+igdb_client_secret=
+
+# SteamGridDB (opcional) - respaldo de caratula si IGDB no tiene
+# https://www.steamgriddb.com/profile/preferences/api
+steamgriddb_key=
