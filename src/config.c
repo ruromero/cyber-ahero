@@ -132,3 +132,19 @@ const char *laptop_config_exe_override(const LaptopConfig *cfg, const char *entr
     free(key);
     return val;
 }
+
+/* ticket 10 */
+int laptop_config_attract_minutes(const LaptopConfig *cfg)
+{
+    const char *v = laptop_config_get(cfg, "attract");
+    if (!v)
+        return ATTRACT_DEFAULT_MINUTES;
+    long n = 0;
+    for (const char *p = v; *p; p++) {
+        if (*p < '0' || *p > '9')
+            return ATTRACT_DEFAULT_MINUTES;
+        if (n < ATTRACT_MAX_MINUTES)
+            n = n * 10 + (*p - '0');
+    }
+    return n > ATTRACT_MAX_MINUTES ? ATTRACT_MAX_MINUTES : (int)n;
+}

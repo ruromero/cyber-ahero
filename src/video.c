@@ -13,6 +13,7 @@ struct Video {
     unsigned char *rgba;
     int width;
     int height;
+    int ends;
 };
 
 static void on_video(plm_t *self, plm_frame_t *frame, void *user)
@@ -129,6 +130,7 @@ void video_update(Video *v, double dt)
     plm_decode(v->plm, dt);
     if (plm_has_ended(v->plm)) {
         plm_rewind(v->plm);
+        v->ends++;
         if (v->audio)
             SDL_ClearQueuedAudio(v->audio);
     }
@@ -171,4 +173,9 @@ int video_width(const Video *v)
 int video_height(const Video *v)
 {
     return v ? v->height : 0;
+}
+
+int video_end_count(const Video *v)
+{
+    return v ? v->ends : 0;
 }
