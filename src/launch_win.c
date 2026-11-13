@@ -1,6 +1,7 @@
 /* Win32 processes for launch.c (ticket 04). XP-compatible APIs only:
  * CreateProcessA, ShellExecuteExA, CreateToolhelp32Snapshot,
- * MsgWaitForMultipleObjects. */
+ * MsgWaitForMultipleObjects; for the mapper helper (ticket 09) EnumWindows,
+ * GetWindowThreadProcessId, PostMessageA and TerminateProcess. */
 #include "launch.h"
 #include "util.h"
 
@@ -136,9 +137,70 @@ static void w_close(void *ctx, ProcHandle proc)
         CloseHandle((HANDLE)proc);
 }
 
+/* --- Mapper helper (ticket 09) --- */
+
+/* How long the helper gets to close on its own before it is ended. */
+#define HELPER_CLOSE_MS 2000
+
+typedef struct Helper {
+    HANDLE proc;
+    DWORD pid;
+} Helper;
+
+static ProcHandle w_start_helper(void *ctx, const char *exe, const char *cmdline,
+                                 const char *work_dir)
+{
+    (void)ctx;
+    char *cmd = xstrdup(cmdline);
+    STARTUPINFOA si;
+    PROCESS_INFORMATION pi;
+    memset(&si, 0, sizeof(si));
+    si.cb = sizeof(si);
+    memset(&pi, 0, sizeof(pi));
+    BOOL ok = CreateProcessA(exe, cmd, NULL, NULL, FALSE, 0, NULL, work_dir, &si, &pi);
+    free(cmd);
+    if (!ok)
+        return NULL;
+    CloseHandle(pi.hThread);
+    Helper *h = xmalloc(sizeof(Helper));
+    h->proc = pi.hProcess;
+    h->pid = pi.dwProcessId;
+    return h;
+}
+
+/* Asks every top-level window of the process (hidden ones too: mappers sit
+ * in the tray) to close. */
+static BOOL CALLBACK close_window_of(HWND w, LPARAM pid)
+{
+    DWORD owner = 0;
+    GetWindowThreadProcessId(w, &owner);
+    if (owner == (DWORD)pid)
+        PostMessageA(w, WM_CLOSE, 0, 0);
+    return TRUE;
+}
+
+static void w_stop_helper(void *ctx, ProcHandle helper)
+{
+    (void)ctx;
+    Helper *h = helper;
+    if (!h)
+        return;
+    if (WaitForSingleObject(h->proc, 0) != WAIT_OBJECT_0) {
+        EnumWindows(close_window_of, (LPARAM)h->pid);
+        wait_pumping(h->proc, HELPER_CLOSE_MS);
+        if (WaitForSingleObject(h->proc, 0) != WAIT_OBJECT_0) {
+            TerminateProcess(h->proc, 0);
+            WaitForSingleObject(h->proc, 1000);
+        }
+    }
+    CloseHandle(h->proc);
+    free(h);
+}
+
 const ProcApi *proc_win(void)
 {
     static const ProcApi api = {NULL, w_start_exe, w_open_shell, w_find_process,
-                                w_wait_exit, w_sleep_ms, w_ticks, w_close};
+                                w_wait_exit, w_sleep_ms, w_ticks, w_close,
+                                w_start_helper, w_stop_helper};
     return &api;
 }

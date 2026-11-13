@@ -540,8 +540,125 @@ static void test_entry_names_the_process_to_wait_for(void)
     fake_fs_free(fs);
 }
 
+/* --- Gamepad mapper helper (ticket 09) --- */
+
+static void test_entry_names_its_mapper_helper_and_its_arguments(void)
+{
+    FakeFs *fs = fake_fs_new();
+    fake_fs_file(fs, ROOT "\\Doom\\juego.cfg",
+                 "exe=Doom\\doom.exe\ncon=C:\\JoyToKey\\JoyToKey.exe\ncon_args=Doom\n");
+    fake_fs_file(fs, "C:\\Juegos\\Doom\\doom.exe", NULL);
+    fake_fs_file(fs, "C:\\JoyToKey\\JoyToKey.exe", NULL);
+
+    Library *lib = scan_with(fs, LAPTOP);
+
+    CHECK_INT(lib->count, 1);
+    if (lib->count == 1) {
+        CHECK_STR(lib->games[0].con, "C:\\JoyToKey\\JoyToKey.exe");
+        CHECK_STR(lib->games[0].con_args, "Doom");
+    }
+    library_free(lib);
+    fake_fs_free(fs);
+}
+
+static void test_relative_mapper_helper_is_found_in_the_install_folders(void)
+{
+    FakeFs *fs = fake_fs_new();
+    fake_fs_file(fs, ROOT "\\Doom\\juego.cfg",
+                 "exe=Doom\\doom.exe\ncon=JoyToKey\\JoyToKey.exe\n");
+    fake_fs_file(fs, "C:\\Juegos\\Doom\\doom.exe", NULL);
+    fake_fs_file(fs, "D:\\Games\\JoyToKey\\JoyToKey.exe", NULL);
+
+    Library *lib = scan_with(fs, LAPTOP);
+
+    CHECK_INT(lib->count, 1);
+    if (lib->count == 1) {
+        CHECK_STR(lib->games[0].con, "D:\\Games\\JoyToKey\\JoyToKey.exe");
+        CHECK_STR(lib->games[0].con_args, NULL);
+    }
+    library_free(lib);
+    fake_fs_free(fs);
+}
+
+static void test_mapper_helper_inside_the_entry_folder_is_found(void)
+{
+    FakeFs *fs = fake_fs_new();
+    fake_fs_file(fs, ROOT "\\Doom\\juego.cfg",
+                 "exe=Doom\\doom.exe\ncon=mando\\JoyToKey.exe\ncon_args=Doom\n");
+    fake_fs_file(fs, "C:\\Juegos\\Doom\\doom.exe", NULL);
+    fake_fs_file(fs, ROOT "\\Doom\\mando\\JoyToKey.exe", NULL);
+
+    Library *lib = scan_with(fs, LAPTOP);
+
+    CHECK_INT(lib->count, 1);
+    if (lib->count == 1)
+        CHECK_STR(lib->games[0].con, ROOT "\\Doom\\mando\\JoyToKey.exe");
+    library_free(lib);
+    fake_fs_free(fs);
+}
+
+static void test_differently_installed_mapper_helper_is_found_by_file_name(void)
+{
+    FakeFs *fs = fake_fs_new();
+    fake_fs_file(fs, ROOT "\\Doom\\juego.cfg",
+                 "exe=Doom\\doom.exe\ncon=JoyToKey\\JoyToKey.exe\n");
+    fake_fs_file(fs, "C:\\Juegos\\Doom\\doom.exe", NULL);
+    fake_fs_file(fs, "D:\\Games\\Utilidades\\JoyToKey_es\\JoyToKey.exe", NULL);
+
+    Library *lib = scan_with(fs, LAPTOP);
+
+    CHECK_INT(lib->count, 1);
+    if (lib->count == 1)
+        CHECK_STR(lib->games[0].con, "D:\\Games\\Utilidades\\JoyToKey_es\\JoyToKey.exe");
+    library_free(lib);
+    fake_fs_free(fs);
+}
+
+static void test_missing_mapper_helper_keeps_the_entry_available(void)
+{
+    FakeFs *fs = fake_fs_new();
+    fake_fs_file(fs, ROOT "\\Doom\\juego.cfg",
+                 "exe=Doom\\doom.exe\ncon=JoyToKey\\JoyToKey.exe\n");
+    fake_fs_file(fs, "C:\\Juegos\\Doom\\doom.exe", NULL);
+
+    Library *lib = scan_with(fs, LAPTOP);
+
+    CHECK_INT(lib->count, 1);
+    CHECK_INT(lib->hidden_count, 0);
+    if (lib->count == 1) {
+        CHECK_STR(lib->games[0].exe, "C:\\Juegos\\Doom\\doom.exe");
+        /* kept as written next to the Entry; starting it fails at JUGAR */
+        CHECK_STR(lib->games[0].con, ROOT "\\Doom\\JoyToKey\\JoyToKey.exe");
+    }
+    library_free(lib);
+    fake_fs_free(fs);
+}
+
+static void test_entry_without_mapper_helper_has_none(void)
+{
+    FakeFs *fs = fake_fs_new();
+    fake_fs_file(fs, ROOT "\\Worms\\juego.cfg", "exe=Worms\\worms.exe\ncon_args=Worms\n");
+    fake_fs_file(fs, "C:\\Juegos\\Worms\\worms.exe", NULL);
+    fake_fs_shortcut(fs, ROOT "\\Doom\\Doom.lnk", "C:\\Juegos\\Doom\\doom.exe");
+    fake_fs_file(fs, "C:\\Juegos\\Doom\\doom.exe", NULL);
+
+    Library *lib = scan_with(fs, LAPTOP);
+
+    CHECK_INT(lib->count, 2);
+    for (int i = 0; i < lib->count; i++)
+        CHECK_STR(lib->games[i].con, NULL);
+    library_free(lib);
+    fake_fs_free(fs);
+}
+
 int main(void)
 {
+    RUN_TEST(test_differently_installed_mapper_helper_is_found_by_file_name);
+    RUN_TEST(test_missing_mapper_helper_keeps_the_entry_available);
+    RUN_TEST(test_entry_without_mapper_helper_has_none);
+    RUN_TEST(test_mapper_helper_inside_the_entry_folder_is_found);
+    RUN_TEST(test_relative_mapper_helper_is_found_in_the_install_folders);
+    RUN_TEST(test_entry_names_its_mapper_helper_and_its_arguments);
     RUN_TEST(test_entry_carries_its_launch_arguments);
     RUN_TEST(test_working_folder_defaults_to_the_executables_folder);
     RUN_TEST(test_relative_working_folder_is_taken_from_the_executables_folder);

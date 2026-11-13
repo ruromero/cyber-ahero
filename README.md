@@ -184,6 +184,40 @@ Windows; si no devuelve ninguno (p. ej. un `.lnk` a algo que no es un
 programa), el menú vuelve enseguida, salvo que se indique `wait=`. Si el juego
 no se puede arrancar, el menú muestra *No se pudo iniciar <juego>*.
 
+### Mando en juegos que solo entienden teclado (`con=`, `con_args=`)
+
+Para juegos antiguos sin soporte de mando, el juego puede ir acompañado de un
+**mapeador externo de mando a teclado** (por ejemplo
+[JoyToKey](https://joytokey.net/)) y sus argumentos, normalmente el perfil:
+
+```
+exe=Doom\doom.exe
+con=JoyToKey\JoyToKey.exe          <- mapeador de mando a teclado
+con_args=Doom                       <- sus argumentos (aquí, el perfil)
+```
+
+- **`con=`**: ejecutable del mapeador. Se resuelve igual que un `exe=`: una
+  ruta absoluta se usa tal cual; una relativa se busca en cada carpeta de
+  instalación (`installs=`) en orden, luego en la carpeta del juego (o la del
+  `juego.cfg`) y por último por nombre de archivo hasta dos niveles dentro de
+  las carpetas de instalación. Si no se encuentra, el juego **no** se oculta.
+- **`con_args=`**: se pasan tal cual al mapeador, detrás de su ruta entre
+  comillas. Con JoyToKey, el argumento es el nombre del perfil
+  (`Doom` carga `Doom.cfg` de la carpeta de JoyToKey).
+
+El mapeador arranca en su propia carpeta **justo antes** que el juego y se
+**cierra cuando el juego termina**, antes de que vuelva el menú: primero se le
+pide que cierre sus ventanas y, si a los 2 segundos sigue abierto, se termina.
+Así nunca se queda funcionando en el menú ni en el siguiente juego. Si el
+mapeador no se puede arrancar, el juego arranca igual y al volver el menú
+muestra *No se pudo iniciar el mapeador del mando de <juego>* (también queda en
+el log). Sin `con=`, todo funciona como siempre.
+
+Consejo: instala JoyToKey en una carpeta de instalación (p. ej.
+`C:\Juegos\JoyToKey`) con un perfil por juego, y no lo dejes en el arranque de
+Windows: si ya hubiera otra copia abierta, JoyToKey podría pasarle el perfil y
+cerrarse, y el lanzador no podría cerrar la que ya estaba.
+
 ## Una biblioteca para todos los portátiles
 
 La misma carpeta `games` (la biblioteca maestra) se copia tal cual a todos los

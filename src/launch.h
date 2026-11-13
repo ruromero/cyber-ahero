@@ -6,13 +6,17 @@
  * call into the operating system goes through a ProcApi, so the flow can be
  * tested with a fake. The Win32 implementation is proc_win() (launch_win.c).
  *
+ *   0. with con= set, start the gamepad mapper helper (ticket 09) in its
+ *      own folder; if it can't be started the game starts anyway;
  *   1. start the Launch target: an executable gets a command line
  *      ("<exe>" <args>) and its working folder; a shortcut is opened
  *      through the system shell, which may or may not hand back a process;
  *   2. on_started(user): the game is running (the menu hides its window);
  *   3. with wait= set, poll for a process of that name for up to
  *      LAUNCH_WAIT_LIMIT_MS and wait for it instead;
- *   4. wait for the process to end.
+ *   4. wait for the process to end;
+ *   5. close the mapper helper (also when the game could not be started),
+ *      before returning to the menu.
  *
  * Waiting must keep handling window messages (the Win32 ProcApi does).
  */
@@ -43,6 +47,12 @@ typedef struct ProcApi {
     void (*sleep_ms)(void *ctx, int ms);
     uint32_t (*ticks)(void *ctx);
     void (*close)(void *ctx, ProcHandle proc);
+    /* Mapper helper (ticket 09). start_helper starts exe like start_exe and
+     * returns it, or NULL on failure. stop_helper closes it (politely, then
+     * by force after a short timeout) and releases the handle. */
+    ProcHandle (*start_helper)(void *ctx, const char *exe, const char *cmdline,
+                               const char *work_dir);
+    void (*stop_helper)(void *ctx, ProcHandle helper);
 } ProcApi;
 
 /* Real Windows processes (launch_win.c, app only). */
@@ -54,6 +64,8 @@ typedef struct LaunchTarget {
     const char *args;      /* may be NULL */
     const char *work_dir;  /* may be NULL */
     const char *wait;      /* wait=: process to wait for, may be NULL */
+    const char *con;       /* con=: mapper helper executable, may be NULL */
+    const char *con_args;  /* con_args=: its arguments, may be NULL */
 } LaunchTarget;
 
 typedef enum LaunchResult {
@@ -65,8 +77,11 @@ typedef enum LaunchResult {
 /* "<exe>" <args>, malloc'd. */
 char *launch_command_line(const char *exe, const char *args);
 
-/* Runs steps 1-4 above. on_started may be NULL. */
+/* Runs steps 0-5 above. on_started may be NULL. *helper_failed (may be
+ * NULL) is set to 1 when con= was set but the helper could not be started,
+ * else 0. */
 LaunchResult launch_and_wait(const ProcApi *api, const LaunchTarget *t,
-                             void (*on_started)(void *user), void *user);
+                             void (*on_started)(void *user), void *user,
+                             int *helper_failed);
 
 #endif
