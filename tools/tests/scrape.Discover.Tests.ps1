@@ -66,8 +66,11 @@ BeforeAll {
     }
 
     function Get-TreeSnapshot($dir) {
+        # Folders are compared by existence only: NTFS can report a folder's
+        # LastWriteTime late, after files were created inside it earlier.
         return @(Get-ChildItem -LiteralPath $dir -Recurse -Force | ForEach-Object {
-            $c = if ($_.PSIsContainer) { '' } else { Get-Content -LiteralPath $_.FullName -Raw }
+            if ($_.PSIsContainer) { "$($_.FullName)|<dir>"; return }
+            $c = Get-Content -LiteralPath $_.FullName -Raw
             "$($_.FullName)|$c|$($_.LastWriteTimeUtc.Ticks)"
         } | Sort-Object)
     }

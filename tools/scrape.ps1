@@ -597,7 +597,12 @@ function Get-GameLabel($g) {
 # again, Enter leaves the Entry without database details.
 function Resolve-GameQuestion($plan, $results) {
     $nq = Get-Norm (Get-CleanName $plan.Folder)
-    $opts = @($results | Sort-Object @{ Expression = { Get-GameScore $_ $nq }; Descending = $true } | Select-Object -First 9)
+    # Sort-Object is not stable in Windows PowerShell 5.1: break ties by the
+    # database's own order so the options don't shuffle between runs.
+    $i = 0
+    $ranked = @($results | ForEach-Object { [pscustomobject]@{ R = $_; Score = (Get-GameScore $_ $nq); Order = $i }; $i++ })
+    $opts = @($ranked | Sort-Object @{ Expression = 'Score'; Descending = $true }, @{ Expression = 'Order' } |
+              Select-Object -First 9 | ForEach-Object { $_.R })
     $labels = @($opts | ForEach-Object { Get-GameLabel $_ })
     $a = [string](& $Ask 'name' ("Que juego es '{0}'? Numero, otro nombre para buscar o Enter para dejarlo sin datos" -f $plan.Folder) $labels)
     $a = $a.Trim()
