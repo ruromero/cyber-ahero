@@ -8,8 +8,21 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "" FORCE)
 endif()
 
+# Unit tests of the portable logic. They are the only thing that builds on a
+# non-Windows host (e.g. macOS/Linux with the native compiler); on Windows
+# they are opt-in with -DCYBER_TESTS=ON.
+option(CYBER_TESTS "Build the unit tests in tests/" OFF)
 if(NOT WIN32)
-    message(FATAL_ERROR "Este proyecto es para Windows.")
+    set(CYBER_TESTS ON CACHE BOOL "" FORCE)
+endif()
+if(CYBER_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
+
+if(NOT WIN32)
+    message(STATUS "Host no Windows: solo se compilan los tests (la app es para Windows).")
+    return()
 endif()
 
 find_package(SDL2 REQUIRED)
@@ -24,6 +37,7 @@ set(APP_SOURCES
     src/text.c
     src/launcher.c
     src/util.c
+    src/util_win.c
     third_party/pl_mpeg_impl.c
 )
 

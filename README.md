@@ -183,6 +183,18 @@ cmake -S . -B build\x64 -G "MinGW Makefiles" ^
 cmake --build build\x64
 ```
 
+### Tests
+
+La lógica portable (sin `windows.h` ni SDL) tiene tests en `tests\`. En un
+host que no es Windows (macOS, Linux), CMake solo compila los tests:
+
+```
+cmake -S . -B build/host-tests && cmake --build build/host-tests
+ctest --test-dir build/host-tests --output-on-failure
+```
+
+En una build de Windows se activan con `-DCYBER_TESTS=ON`.
+
 ## Distribuir
 
 Copia junto al `.exe`:
