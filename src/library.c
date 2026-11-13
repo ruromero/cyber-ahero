@@ -1,4 +1,5 @@
 #include "library.h"
+#include "config.h"
 #include "util.h"
 #include "compat.h"
 
@@ -132,14 +133,27 @@ static int score_exe(const char *filename, const char *game_name)
 }
 
 /* Everything found while scanning one Entry folder. */
+/* What the scan knows about this laptop (ticket 02). */
+typedef struct Laptop {
+    const LaptopConfig *cfg;
+    char **installs;   /* Install folders, in listed order */
+    /* Files up to two folder levels inside the Install folders, built on
+     * first use: Install folders in listed order, shallower files first. */
+    int indexed;
+    char **files;
+    int file_count;
+} Laptop;
+
 typedef struct Scan {
     const Fs *fs;
+    Laptop *laptop;
     Game g;
     char **links;      /* shortcuts, in the order they are tried */
     int link_count;
     char *auto_exe;    /* best-scoring executable found in the folder */
     int auto_score;
     char *cfg_exe;     /* exe= from juego.cfg, resolved but maybe missing */
+    char *cfg_exe_rel; /* exe= as written, when it is a relative path */
 } Scan;
 
 static void add_link(Scan *s, const char *path, int first)
@@ -306,6 +320,8 @@ static void apply_cfg_value(Scan *s, const char *cfg_dir, const char *key, const
     } else if (_stricmp(key, "exe") == 0) {
         free(s->cfg_exe);
         s->cfg_exe = resolve_cfg_value(s, cfg_dir, val);
+        free(s->cfg_exe_rel);
+        s->cfg_exe_rel = path_is_absolute(val) ? NULL : xstrdup(val);
     } else if (_stricmp(key, "shortcut") == 0) {
         char *p = resolve_cfg_value(s, cfg_dir, val);
         add_link(s, p, 1);
@@ -441,19 +457,127 @@ static void scan_nested_launchers(Scan *s, const char *dir)
     names_free(&subs);
 }
 
-/* Picks the Launch target (exe= that exists, then a shortcut whose target
- * exists or can't be read, then the automatic executable). Returns 1 when one
- * was found; otherwise sets *reason. */
+/* A relative exe= joined to each Install folder in listed order; the first
+ * that exists, or NULL. */
+static char *find_in_installs(Scan *s, const char *rel)
+{
+    for (int i = 0; s->laptop->installs[i]; i++) {
+        char *p = path_join(s->laptop->installs[i], rel);
+        if (fs_exists(s, p))
+            return p;
+        free(p);
+    }
+    return NULL;
+}
+
+/* Files and folders of one directory, collected in a single listing. */
+typedef struct DirListing {
+    Names files;
+    Names dirs;
+} DirListing;
+
+static void collect_entry(void *user, const char *name, int is_dir, int is_hidden)
+{
+    DirListing *d = user;
+    collect_name(is_dir ? &d->dirs : &d->files, name, is_dir, is_hidden);
+}
+
+static void laptop_index_add(Laptop *l, char *path)
+{
+    l->files = xrealloc(l->files, (size_t)(l->file_count + 1) * sizeof(char *));
+    l->files[l->file_count++] = path;
+}
+
+/* Lists every Install folder down to two levels below it, breadth first. */
+static void laptop_build_index(Laptop *l, const Fs *fs)
+{
+    l->indexed = 1;
+    for (int i = 0; l->installs[i]; i++) {
+        Names level;
+        level.items = xmalloc(sizeof(char *));
+        level.items[0] = xstrdup(l->installs[i]);
+        level.count = 1;
+        for (int depth = 0; depth <= 2; depth++) {
+            Names next;
+            next.items = NULL;
+            next.count = 0;
+            for (int k = 0; k < level.count; k++) {
+                DirListing d;
+                memset(&d, 0, sizeof(d));
+                d.dirs.want_dirs = 1;
+                fs->list_dir(fs->ctx, level.items[k], collect_entry, &d);
+                for (int f = 0; f < d.files.count; f++)
+                    laptop_index_add(l, path_join(level.items[k], d.files.items[f]));
+                for (int f = 0; depth < 2 && f < d.dirs.count; f++) {
+                    next.items = xrealloc(next.items, (size_t)(next.count + 1) * sizeof(char *));
+                    next.items[next.count++] = path_join(level.items[k], d.dirs.items[f]);
+                }
+                names_free(&d.files);
+                names_free(&d.dirs);
+            }
+            names_free(&level);
+            level = next;
+        }
+        names_free(&level);
+    }
+}
+
+/* The executable's file name searched up to two folder levels deep inside
+ * each Install folder, in listed order; the first match, or NULL. */
+static char *search_installs_by_name(Scan *s, const char *rel)
+{
+    Laptop *l = s->laptop;
+    if (!l->indexed)
+        laptop_build_index(l, s->fs);
+    const char *name = path_basename(rel);
+    for (int i = 0; i < l->file_count; i++)
+        if (_stricmp(path_basename(l->files[i]), name) == 0)
+            return xstrdup(l->files[i]);
+    return NULL;
+}
+
+/* Picks the Launch target, first match wins:
+ *   1. the per-laptop override exe.<Entry folder name>= that exists;
+ *   2. an absolute exe= that exists;
+ *   3. a relative exe= in each Install folder, in listed order, then (kept
+ *      from ticket 01) relative to the Entry folder or its juego.cfg;
+ *   4. the file name of a relative exe= searched up to two folder levels
+ *      deep inside each Install folder, in listed order;
+ *   5. a shortcut whose target exists or can't be read;
+ *   6. the automatic executable inside the Entry folder.
+ * Returns 1 when one was found; otherwise sets *reason. */
 static int resolve_launch_target(Scan *s, HiddenReason *reason)
 {
     Game *g = &s->g;
     int had_info = 0;
 
+    const char *over = laptop_config_exe_override(s->laptop->cfg, path_basename(g->dir));
+    if (over) {
+        had_info = 1;
+        if (fs_exists(s, over)) {
+            g->exe = xstrdup(over);
+            return 1;
+        }
+    }
+    if (s->cfg_exe_rel) {
+        char *p = find_in_installs(s, s->cfg_exe_rel);
+        if (p) {
+            g->exe = p;
+            return 1;
+        }
+    }
     if (s->cfg_exe) {
         had_info = 1;
         if (fs_exists(s, s->cfg_exe)) {
             g->exe = s->cfg_exe;
             s->cfg_exe = NULL;
+            return 1;
+        }
+    }
+    if (s->cfg_exe_rel) {
+        char *p = search_installs_by_name(s, s->cfg_exe_rel);
+        if (p) {
+            g->exe = p;
             return 1;
         }
     }
@@ -507,6 +631,7 @@ static void scan_free(Scan *s)
     free(s->links);
     free(s->auto_exe);
     free(s->cfg_exe);
+    free(s->cfg_exe_rel);
 }
 
 static int game_cmp(const void *a, const void *b)
@@ -534,7 +659,12 @@ static void add_hidden(Library *lib, Game *g, HiddenReason reason)
 
 Library *library_scan(const Fs *fs, const char *root, const struct LaptopConfig *cfg)
 {
-    (void)cfg;
+    Laptop laptop;
+    laptop.cfg = cfg;
+    laptop.installs = laptop_config_installs(cfg);
+    laptop.indexed = 0;
+    laptop.files = NULL;
+    laptop.file_count = 0;
     Library *lib = xmalloc(sizeof(Library));
     memset(lib, 0, sizeof(*lib));
     lib->root = xstrdup(root);
@@ -544,6 +674,7 @@ Library *library_scan(const Fs *fs, const char *root, const struct LaptopConfig 
         Scan s;
         memset(&s, 0, sizeof(s));
         s.fs = fs;
+        s.laptop = &laptop;
         s.g.name = xstrdup(entries.items[i]);
         s.g.dir = path_join(root, entries.items[i]);
         scan_dir_files(&s, s.g.dir);
@@ -567,6 +698,10 @@ Library *library_scan(const Fs *fs, const char *root, const struct LaptopConfig 
         scan_free(&s);
     }
     names_free(&entries);
+    laptop_config_list_free(laptop.installs);
+    for (int i = 0; i < laptop.file_count; i++)
+        free(laptop.files[i]);
+    free(laptop.files);
 
     if (lib->count > 1)
         qsort(lib->games, (size_t)lib->count, sizeof(Game), game_cmp);

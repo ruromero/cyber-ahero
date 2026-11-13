@@ -22,4 +22,15 @@ const char *laptop_config_get(const LaptopConfig *cfg, const char *key);
 char *laptop_config_library_root(const LaptopConfig *cfg, const char *arg, const char *env,
                                  const char *exe_dir);
 
+/* --- One Library for every laptop (ticket 02) --- */
+
+/* Install folders from installs= (separated by ';', trimmed, empty parts
+ * skipped), in listed order. Returns a malloc'd NULL-terminated array (never
+ * NULL itself); free it with laptop_config_list_free. */
+char **laptop_config_installs(const LaptopConfig *cfg);
+void laptop_config_list_free(char **list);
+
+/* The per-laptop override exe.<entry folder name>=<path>, or NULL. */
+const char *laptop_config_exe_override(const LaptopConfig *cfg, const char *entry_folder);
+
 #endif
