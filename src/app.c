@@ -6,6 +6,7 @@
 #include "util.h"
 #include "pad_sdl.h"
 #include "redraw.h"
+#include "organizer.h"
 
 #include <SDL.h>
 #include <SDL_image.h>
@@ -65,6 +66,13 @@ typedef struct App {
 
     /* ticket 08: gamepad navigation */
     PadNav pads;
+
+    /* ticket 06: Organizer view and rescan */
+    const char *lib_root;
+    const struct LaptopConfig *cfg;
+    OrganizerReport *org;   /* rows of the Organizer view, while it is open */
+    int org_open;
+    int org_scroll;         /* first visible row */
 } App;
 
 /*
@@ -684,12 +692,18 @@ static void move_selection(App *a, const SDL_Rect *grid, int dx, int dy)
 }
 
 static void launch(App *a);
+static void organizer_close(App *a);
 
 /* Gamepad: same effect as the arrow keys, Enter and Esc (without quitting). */
 static void pad_menu_action(App *a, const SDL_Rect *grid, PadAction act)
 {
     if (act == PAD_ACT_NONE)
         return;
+    if (a->org_open) { /* ticket 06: the Organizer view is modal */
+        if (act == PAD_ACT_CLOSE)
+            organizer_close(a);
+        return;
+    }
     a->mouse_active = 0;
     switch (act) {
     case PAD_ACT_LEFT:  move_selection(a, grid, -1, 0); a->pinned = a->selected; break;
@@ -1012,6 +1026,281 @@ static void draw_theme_button(App *a, int w)
                       hov ? COL_HDR_M : COL_HDR_L, dots, 4);
 }
 
+/* ---- ticket 06: Organizer view and rescan -------------------------------- */
+
+/* Ticket 05 (Kiosk mode) replaces this: F5 only rescans outside Kiosk mode. */
+static int app_in_kiosk(const App *a)
+{
+    (void)a;
+    return 0;
+}
+
+static void app_caches_alloc(App *a)
+{
+    int cap = a->lib->count > 0 ? a->lib->count : 1;
+    a->icons = calloc((size_t)cap, sizeof(SDL_Texture *));
+    a->icon_tried = calloc((size_t)cap, 1);
+    a->icons_w = calloc((size_t)cap, sizeof(int));
+    a->icons_h = calloc((size_t)cap, sizeof(int));
+    a->covers = calloc((size_t)cap, sizeof(SDL_Texture *));
+    a->cover_tried = calloc((size_t)cap, 1);
+    a->covers_w = calloc((size_t)cap, sizeof(int));
+    a->covers_h = calloc((size_t)cap, sizeof(int));
+}
+
+static void app_caches_free(App *a)
+{
+    for (int i = 0; a->lib && i < a->lib->count; i++) {
+        if (a->icons && a->icons[i])
+            SDL_DestroyTexture(a->icons[i]);
+        if (a->covers && a->covers[i])
+            SDL_DestroyTexture(a->covers[i]);
+    }
+    free(a->icons);
+    free(a->icon_tried);
+    free(a->icons_w);
+    free(a->icons_h);
+    free(a->covers);
+    free(a->cover_tried);
+    free(a->covers_w);
+    free(a->covers_h);
+    a->icons = a->covers = NULL;
+    a->icon_tried = a->cover_tried = NULL;
+    a->icons_w = a->icons_h = a->covers_w = a->covers_h = NULL;
+}
+
+/* Scans the Library again and refreshes the menu (and the Organizer view, if
+   open). The per-Entry texture caches are sized by the Library, so they are
+   freed and allocated again. */
+static void app_rescan(App *a)
+{
+    stop_video(a);
+    a->selected = -1;
+    a->pinned = -1;
+    app_caches_free(a);
+    library_free(a->lib);
+    a->lib = library_scan(fs_win(), a->lib_root, a->cfg);
+    app_caches_alloc(a);
+    if (a->org) {
+        a->org_scroll = 0;
+        organizer_report_free(a->org);
+        a->org = organizer_report(a->lib);
+    }
+    char buf[128];
+    SDL_snprintf(buf, sizeof(buf), "Biblioteca reescaneada: %d juegos", a->lib->count);
+    app_status(a, buf);
+}
+
+static SDL_Rect organizer_button_rect(App *a, int w)
+{
+    SDL_Rect t = theme_rect(a, w);
+    SDL_Rect r = { t.x - t.w - (int)(8 * a->scale), t.y, t.w, t.h };
+    return r;
+}
+
+static int in_rect(SDL_Rect r, int x, int y)
+{
+    return x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h;
+}
+
+static void draw_organizer_button(App *a, int w)
+{
+    SDL_Rect r = organizer_button_rect(a, w);
+    double s = a->scale;
+    int hov = in_rect(r, a->mouse_x, a->mouse_y) || a->org_open;
+    round_rect_c(a->ren, r, (int)(4 * s), hov ? COL_HDR_M : COL_HDR_L);
+    /* a checklist: three ticks and lines */
+    SDL_Color fg = { 236, 239, 245, 255 };
+    int m = r.w / 4;
+    int lh = (r.h - m * 2) / 3;
+    for (int k = 0; k < 3; k++) {
+        int cy = r.y + m + lh * k + lh / 2;
+        SDL_Rect box = { r.x + m, cy - lh / 4, lh / 2, lh / 2 };
+        SDL_SetRenderDrawColor(a->ren, fg.r, fg.g, fg.b, 255);
+        SDL_RenderFillRect(a->ren, &box);
+        SDL_Rect line = { box.x + box.w + m / 2, cy - (int)(1 * s), r.x + r.w - m - (box.x + box.w + m / 2),
+                          (int)(2 * s) > 1 ? (int)(2 * s) : 2 };
+        SDL_RenderFillRect(a->ren, &line);
+    }
+}
+
+typedef struct OrgLayout {
+    SDL_Rect panel, list, rescan, close, up, down;
+    int hdr_h, row_h, rows_visible;
+} OrgLayout;
+
+static void organizer_layout(App *a, int w, int h, OrgLayout *L)
+{
+    double s = a->scale;
+    int m = (int)(24 * s);
+    L->panel.x = m;
+    L->panel.y = a->title_h + m;
+    L->panel.w = w - m * 2;
+    L->panel.h = h - L->panel.y - m;
+    L->hdr_h = (int)(46 * s);
+    int pad = a->pad;
+    int bh = (int)(40 * s);
+    int bw = (int)(170 * s);
+    int by = L->panel.y + L->panel.h - pad - bh;
+    L->close = (SDL_Rect){ L->panel.x + L->panel.w - pad - bw, by, bw, bh };
+    L->rescan = (SDL_Rect){ L->close.x - (int)(12 * s) - bw, by, bw, bh };
+    int lh = a->fonts ? TTF_FontHeight(a->fonts->small) : (int)(16 * s);
+    L->row_h = lh + (int)(12 * s);
+    int sb = bh; /* scroll buttons, right of the list */
+    int top = L->panel.y + L->hdr_h + pad + L->row_h; /* summary line above the list */
+    L->list = (SDL_Rect){ L->panel.x + pad, top, L->panel.w - pad * 3 - sb, by - pad - top };
+    L->rows_visible = L->list.h / L->row_h;
+    if (L->rows_visible < 1)
+        L->rows_visible = 1;
+    L->up = (SDL_Rect){ L->list.x + L->list.w + pad, L->list.y, sb, sb };
+    L->down = (SDL_Rect){ L->up.x, L->list.y + L->list.h - sb, sb, sb };
+}
+
+static void organizer_scroll(App *a, int rows, int visible)
+{
+    int max = a->org ? a->org->count - visible : 0;
+    a->org_scroll += rows;
+    if (a->org_scroll > max)
+        a->org_scroll = max;
+    if (a->org_scroll < 0)
+        a->org_scroll = 0;
+}
+
+static void organizer_open(App *a)
+{
+    set_selected(a, -1);
+    a->pinned = -1;
+    organizer_report_free(a->org);
+    a->org = organizer_report(a->lib);
+    a->org_scroll = 0;
+    a->org_open = 1;
+}
+
+static void organizer_close(App *a)
+{
+    a->org_open = 0;
+    organizer_report_free(a->org);
+    a->org = NULL;
+}
+
+static void draw_organizer(App *a, int w, int h)
+{
+    OrgLayout L;
+    organizer_layout(a, w, h, &L);
+    Fonts *fn = a->fonts;
+    double s = a->scale;
+    int pad = a->pad;
+
+    SDL_Rect full = { 0, a->title_h, w, h - a->title_h };
+    SDL_SetRenderDrawColor(a->ren, 0, 0, 0, 140);
+    SDL_RenderFillRect(a->ren, &full);
+
+    round_rect_c(a->ren, L.panel, a->radius, COL_PANEL_EDGE);
+    SDL_Rect inner = { L.panel.x + 1, L.panel.y + 1, L.panel.w - 2, L.panel.h - 2 };
+    vgrad(a->ren, inner, COL_PANEL_TOP, COL_PANEL_BOT);
+    SDL_Rect hdr = { inner.x, inner.y, inner.w, L.hdr_h };
+    hgrad3(a->ren, hdr, COL_HDR_L, COL_HDR_M, COL_HDR_R);
+    gloss_strip(a->ren, hdr, 0, L.hdr_h / 2, 70);
+
+    if (fn && a->org) {
+        int bh = TTF_FontHeight(fn->body);
+        text_draw(a->ren, fn->body, "ORGANIZADOR", COL_WHITE, hdr.x + pad, hdr.y + (L.hdr_h - bh) / 2);
+        char buf[512];
+        SDL_snprintf(buf, sizeof(buf), "Biblioteca: %s", a->lib->root ? a->lib->root : "");
+        int lx = hdr.x + pad + text_measure(fn->body, "ORGANIZADOR") + pad;
+        SDL_Rect rb = { lx, hdr.y + (L.hdr_h - TTF_FontHeight(fn->small)) / 2, hdr.x + hdr.w - pad - lx,
+                        TTF_FontHeight(fn->small) };
+        text_ellipsized(a->ren, fn->small, buf, COL_WHITE, rb);
+
+        SDL_snprintf(buf, sizeof(buf), "Disponibles: %d    Ocultos: %d    Incompletos: %d",
+                     a->org->available_count, a->org->hidden_count, a->org->incomplete_count);
+        text_draw(a->ren, fn->small, buf, COL_KEY, L.list.x,
+                  L.panel.y + L.hdr_h + pad / 2 + (L.row_h - TTF_FontHeight(fn->small)) / 2);
+
+        SDL_Color hidden_col = { 230, 110, 40, 255 };
+        int namew = L.list.w * 40 / 100;
+        int th = TTF_FontHeight(fn->small);
+        if (a->org->count == 0) {
+            text_draw_centered(a->ren, fn->body, "Todo en orden: no hay juegos ocultos ni incompletos",
+                               COL_TEXT, L.list);
+        }
+        for (int k = 0; k < L.rows_visible && a->org_scroll + k < a->org->count; k++) {
+            const OrganizerRow *row = &a->org->rows[a->org_scroll + k];
+            int y = L.list.y + k * L.row_h;
+            int ty = y + (L.row_h - th) / 2;
+            SDL_Rect nb = { L.list.x, ty, namew - (int)(10 * s), th };
+            text_ellipsized(a->ren, fn->small, row->name, COL_TEXT, nb);
+            SDL_Rect vb = { L.list.x + namew, ty, L.list.w - namew, th };
+            text_ellipsized(a->ren, fn->small, row->text,
+                            row->kind == ORGANIZER_HIDDEN ? hidden_col : COL_DIM, vb);
+            SDL_SetRenderDrawColor(a->ren, COL_ROW_LINE.r, COL_ROW_LINE.g, COL_ROW_LINE.b, 255);
+            SDL_RenderDrawLine(a->ren, L.list.x, y + L.row_h, L.list.x + L.list.w, y + L.row_h);
+        }
+        if (a->org->count > L.rows_visible) {
+            draw_button(a, L.up, "^");
+            draw_button(a, L.down, "v");
+            SDL_snprintf(buf, sizeof(buf), "%d-%d / %d", a->org_scroll + 1,
+                         a->org_scroll + L.rows_visible, a->org->count);
+            text_draw(a->ren, fn->small, buf, COL_DIM, L.list.x,
+                      L.rescan.y + (L.rescan.h - th) / 2);
+        }
+    }
+    draw_button(a, L.rescan, "Reescanear");
+    draw_button(a, L.close, "Cerrar");
+}
+
+/* Left click. Returns 1 if the Organizer button or the open view took it
+   (the view is modal: clicks never reach the menu behind it). */
+static int organizer_click(App *a, int x, int y)
+{
+    int w = BASE_W, h = BASE_H;
+    SDL_GetRendererOutputSize(a->ren, &w, &h);
+    if (in_rect(organizer_button_rect(a, w), x, y)) {
+        if (a->org_open)
+            organizer_close(a);
+        else
+            organizer_open(a);
+        return 1;
+    }
+    if (!a->org_open || y < a->title_h)
+        return 0; /* the title bar (theme button) keeps working */
+    OrgLayout L;
+    organizer_layout(a, w, h, &L);
+    if (in_rect(L.rescan, x, y))
+        app_rescan(a);
+    else if (in_rect(L.close, x, y))
+        organizer_close(a);
+    else if (in_rect(L.up, x, y))
+        organizer_scroll(a, -(L.rows_visible - 1 > 1 ? L.rows_visible - 1 : 1), L.rows_visible);
+    else if (in_rect(L.down, x, y))
+        organizer_scroll(a, L.rows_visible - 1 > 1 ? L.rows_visible - 1 : 1, L.rows_visible);
+    else if (y >= a->title_h && !in_rect(L.panel, x, y))
+        organizer_close(a);
+    return 1;
+}
+
+static void organizer_wheel(App *a, int dy)
+{
+    int w = BASE_W, h = BASE_H;
+    SDL_GetRendererOutputSize(a->ren, &w, &h);
+    OrgLayout L;
+    organizer_layout(a, w, h, &L);
+    organizer_scroll(a, -dy * 3, L.rows_visible);
+}
+
+/* A key while the view is open. Returns 1 if consumed (everything but F5 and
+   the fullscreen keys, so the menu behind never acts). */
+static int organizer_key(App *a, SDL_Keycode k, Uint16 mod)
+{
+    if (k == SDLK_F5 || k == SDLK_F11 || (k == SDLK_RETURN && (mod & KMOD_ALT)))
+        return 0;
+    if (k == SDLK_ESCAPE)
+        organizer_close(a);
+    return 1;
+}
+
+/* ---- end ticket 06 -------------------------------------------------------- */
+
 static void draw(App *a)
 {
     int w = BASE_W, h = BASE_H;
@@ -1041,6 +1330,7 @@ static void draw(App *a)
         text_draw(a->ren, fn->title, "CIBER AHERO", COL_WHITE, (int)(16 * s), (a->title_h - th) / 2);
     }
     draw_theme_button(a, w);
+    draw_organizer_button(a, w);
 
     if (fn && a->status[0] && !SDL_TICKS_PASSED(SDL_GetTicks(), a->status_until)) {
         char buf[256];
@@ -1105,6 +1395,8 @@ static void draw(App *a)
     }
 
     draw_column(a, w, h);
+    if (a->org_open)
+        draw_organizer(a, w, h);
 }
 
 static void toggle_fullscreen(App *a)
@@ -1162,16 +1454,10 @@ int app_run(const char *library_root, const struct LaptopConfig *cfg)
 
     app_metrics(&a);
 
+    a.lib_root = library_root;
+    a.cfg = cfg;
     a.lib = library_scan(fs_win(), library_root, cfg);
-    int cap = a.lib->count > 0 ? a.lib->count : 1;
-    a.icons = calloc((size_t)cap, sizeof(SDL_Texture *));
-    a.icon_tried = calloc((size_t)cap, 1);
-    a.icons_w = calloc((size_t)cap, sizeof(int));
-    a.icons_h = calloc((size_t)cap, sizeof(int));
-    a.covers = calloc((size_t)cap, sizeof(SDL_Texture *));
-    a.cover_tried = calloc((size_t)cap, 1);
-    a.covers_w = calloc((size_t)cap, sizeof(int));
-    a.covers_h = calloc((size_t)cap, sizeof(int));
+    app_caches_alloc(&a);
     a.theme = 0;
     theme_apply(a.theme);
     a.fonts = fonts_load(a.scale);
@@ -1196,6 +1482,8 @@ int app_run(const char *library_root, const struct LaptopConfig *cfg)
                 a.mouse_x = e.motion.x;
                 a.mouse_y = e.motion.y;
                 a.mouse_active = 1;
+                if (a.org_open)
+                    break; /* ticket 06: no hover selection behind the view */
                 {
                     int idx = hit_test(&a, &grid, e.motion.x, e.motion.y);
                     if (idx >= 0 && a.pinned < 0)
@@ -1208,7 +1496,9 @@ int app_run(const char *library_root, const struct LaptopConfig *cfg)
                 break;
             case SDL_MOUSEBUTTONDOWN:
                 a.mouse_active = 1;
-                if (e.button.button == SDL_BUTTON_LEFT) {
+                if (e.button.button == SDL_BUTTON_LEFT && organizer_click(&a, e.button.x, e.button.y)) {
+                    /* ticket 06: Organizer button or view */
+                } else if (e.button.button == SDL_BUTTON_LEFT) {
                     int w = BASE_W, h = BASE_H;
                     SDL_GetRendererOutputSize(ren, &w, &h);
                     SDL_Rect panel, hero, button;
@@ -1245,11 +1535,17 @@ int app_run(const char *library_root, const struct LaptopConfig *cfg)
                 }
                 break;
             case SDL_MOUSEWHEEL:
+                if (a.org_open) {
+                    organizer_wheel(&a, e.wheel.y);
+                    break;
+                }
                 a.scroll -= e.wheel.y * (int)(48 * a.scale);
                 clamp_scroll(&a, &grid);
                 break;
             case SDL_KEYDOWN:
                 a.mouse_active = 0;
+                if (a.org_open && organizer_key(&a, e.key.keysym.sym, e.key.keysym.mod))
+                    break;
                 switch (e.key.keysym.sym) {
                 case SDLK_ESCAPE:
                     if (a.pinned >= 0) {
@@ -1290,6 +1586,10 @@ int app_run(const char *library_root, const struct LaptopConfig *cfg)
                     move_selection(&a, &grid, 0, 1);
                     a.pinned = a.selected;
                     break;
+                case SDLK_F5:
+                    if (!app_in_kiosk(&a))
+                        app_rescan(&a);
+                    break;
                 default:
                     break;
                 }
@@ -1318,20 +1618,8 @@ int app_run(const char *library_root, const struct LaptopConfig *cfg)
     }
 
     stop_video(&a);
-    for (int i = 0; i < a.lib->count; i++) {
-        if (a.icons[i])
-            SDL_DestroyTexture(a.icons[i]);
-        if (a.covers[i])
-            SDL_DestroyTexture(a.covers[i]);
-    }
-    free(a.icons);
-    free(a.icon_tried);
-    free(a.icons_w);
-    free(a.icons_h);
-    free(a.covers);
-    free(a.cover_tried);
-    free(a.covers_w);
-    free(a.covers_h);
+    app_caches_free(&a);
+    organizer_report_free(a.org);
     fonts_free(a.fonts);
     if (a.def_icon)
         SDL_DestroyTexture(a.def_icon);
