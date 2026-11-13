@@ -57,6 +57,13 @@ cmake -S . -B build/cross-$t -DCMAKE_SYSTEM_NAME=Windows \
   -DSDL2_ttf_DIR=$D/SDL2_ttf/$t/lib/cmake/SDL2_ttf
 cmake --build build/cross-$t
 
+# Ojo: el libmsvcrt.a de Homebrew es en realidad la UCRT, que XP no tiene. Para
+# un .exe de 32 bits que arranque en XP, añade a la configuración:
+#   -DCMAKE_C_FLAGS=-mcrtdll=msvcrt-os -DCMAKE_EXE_LINKER_FLAGS=-mcrtdll=msvcrt-os
+# y comprueba que importa msvcrt.dll y ningún api-ms-win-crt-*.dll:
+#   i686-w64-mingw32-objdump -p build/cross-$t/cyber_ahero.exe | grep "DLL Name"
+# (w64devkit en Windows ya enlaza msvcrt.dll; no hace falta nada.)
+
 # Tests de PowerShell
 pwsh -NoProfile -Command 'Invoke-Pester tools/tests'
 ```
