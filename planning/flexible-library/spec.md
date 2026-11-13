@@ -105,37 +105,38 @@ Players can navigate the menu with a gamepad. Games can be paired with an extern
 49. As an Organizer, I want to see which Entries are hidden on this laptop and why (no launch information, or Installation not found), so that I know what to install or fix.
 50. As an Organizer, I want to see which Entries lack a cover, a preview or details, so that I can complete the Library.
 51. As an Organizer, I want a rescan button in the Organizer view, so that I can confirm a fix straight away.
+52. As an Organizer, I want a plain-text log next to the launcher that lists, for every scan, each Available Entry with the exact file it will start and which rule found it, each hidden Entry with why it is hidden, and every game started and ended with the exact path launched, so that I can find out why a game is missing or picked the wrong executable on a laptop, even after a crash.
 
 ### Discovery
 
-52. As an Organizer, I want a tool that finds Installations no Entry points to yet, so that adding new games doesn't mean building folders by hand.
-53. As an Organizer, I want each top-level folder of an Install folder to count as one candidate, so that discovery is predictable.
-54. As an Organizer, I want discovery to pick the most likely executable of each candidate, so that most games need no questions.
-55. As an Organizer, I want discovery to match candidates against the online game database and fetch cover, details and description, so that new Entries look complete.
-56. As an Organizer, I want discovery to ask me only when it isn't sure (game name, which executable, launch arguments), so that it stays quick for obvious games.
-57. As an Organizer, I want discovery to write Entries with relative Launch targets, so that they work on every laptop.
-58. As an Organizer, I want discovery to optionally fetch a preview video in the right format, so that new Entries play in the Info panel.
-59. As an Organizer, I want a dry run that shows what discovery would create without writing anything, so that I can check before committing changes to the Master Library.
-60. As an Organizer, I want discovery to leave existing Entries untouched unless I ask it to refresh them, so that my manual fixes aren't overwritten.
-61. As an Organizer, I want discovery to run on a modern PC, so that it can use the online database, which needs modern HTTPS that XP lacks.
+53. As an Organizer, I want a tool that finds Installations no Entry points to yet, so that adding new games doesn't mean building folders by hand.
+54. As an Organizer, I want each top-level folder of an Install folder to count as one candidate, so that discovery is predictable.
+55. As an Organizer, I want discovery to pick the most likely executable of each candidate, so that most games need no questions.
+56. As an Organizer, I want discovery to match candidates against the online game database and fetch cover, details and description, so that new Entries look complete.
+57. As an Organizer, I want discovery to ask me only when it isn't sure (game name, which executable, launch arguments), so that it stays quick for obvious games.
+58. As an Organizer, I want discovery to write Entries with relative Launch targets, so that they work on every laptop.
+59. As an Organizer, I want discovery to optionally fetch a preview video in the right format, so that new Entries play in the Info panel.
+60. As an Organizer, I want a dry run that shows what discovery would create without writing anything, so that I can check before committing changes to the Master Library.
+61. As an Organizer, I want discovery to leave existing Entries untouched unless I ask it to refresh them, so that my manual fixes aren't overwritten.
+62. As an Organizer, I want discovery to run on a modern PC, so that it can use the online database, which needs modern HTTPS that XP lacks.
 
 ### Gamepad
 
-62. As a Player, I want to move through the menu with a gamepad's D-pad or stick, so that I don't need the mouse.
-63. As a Player, I want the A button to start the selected game and B to close the Info panel, so that the controls feel familiar.
-64. As a Player, I want both modern (Xbox-style) and older pads to work, so that whatever pad I bring is usable.
-65. As a Player, I want to plug a pad in while the menu is open, so that I don't have to restart anything.
-66. As an Organizer, I want to pair a game with an external gamepad-to-keyboard mapper and its profile, so that Players can use pads in old games that only know the keyboard.
-67. As an Organizer, I want that mapper to start with the game and close when the game ends, so that it never stays running in the menu or in the next game.
-68. As an Organizer, I want this to work on Windows XP, so that vintage laptops get pads in-game too.
+63. As a Player, I want to move through the menu with a gamepad's D-pad or stick, so that I don't need the mouse.
+64. As a Player, I want the A button to start the selected game and B to close the Info panel, so that the controls feel familiar.
+65. As a Player, I want both modern (Xbox-style) and older pads to work, so that whatever pad I bring is usable.
+66. As a Player, I want to plug a pad in while the menu is open, so that I don't have to restart anything.
+67. As an Organizer, I want to pair a game with an external gamepad-to-keyboard mapper and its profile, so that Players can use pads in old games that only know the keyboard.
+68. As an Organizer, I want that mapper to start with the game and close when the game ends, so that it never stays running in the menu or in the next game.
+69. As an Organizer, I want this to work on Windows XP, so that vintage laptops get pads in-game too.
 
 ### Attract mode
 
-69. As an Organizer, I want idle laptops to start Attract mode after a few minutes, so that the room looks like a café full of terminals.
-70. As an Organizer, I want to set the idle time per laptop, or turn Attract mode off, so that I can adapt it to the event.
-71. As a passer-by, I want Attract mode to show each Available Entry with its preview playing, so that I'm tempted to sit down and play.
-72. As an Organizer, I want Entries without a preview to show their cover for a shorter time, so that the loop keeps moving.
-73. As a Player, I want any mouse, keyboard or gamepad input to bring back the menu without starting a game, so that waking the laptop is safe.
+70. As an Organizer, I want idle laptops to start Attract mode after a few minutes, so that the room looks like a café full of terminals.
+71. As an Organizer, I want to set the idle time per laptop, or turn Attract mode off, so that I can adapt it to the event.
+72. As a passer-by, I want Attract mode to show each Available Entry with its preview playing, so that I'm tempted to sit down and play.
+73. As an Organizer, I want Entries without a preview to show their cover for a shorter time, so that the loop keeps moving.
+74. As a Player, I want any mouse, keyboard or gamepad input to bring back the menu without starting a game, so that waking the laptop is safe.
 
 ## Implementation Decisions
 
@@ -151,6 +152,7 @@ Players can navigate the menu with a gamepad. Games can be paired with an extern
   4. the executable's file name searched up to two folder levels deep inside each Install folder, in listed order;
   5. any shortcut in the Entry folder whose target exists;
   6. the existing automatic choice of an executable inside the Entry folder or its first-level subfolders.
+- Deliberate extra in that order: a relative `exe=` that isn't found in any Install folder is also tried in the Entry folder (and the folder of its `juego.cfg`) before the file-name search of rule 4. This keeps Entries that carry the game inside their own folder working, as they did before Install folders existed.
 - A shortcut counts as Available when its target file exists. A shortcut whose target can't be read is treated as Available and left for the system to open.
 - The rule that the shortcut must be named `game.lnk` is removed.
 - Per-Entry options (`juego.cfg`) gain:
@@ -171,6 +173,7 @@ Players can navigate the menu with a gamepad. Games can be paired with an extern
 - With `wait=` set, the launcher waits (with a time limit) for a process with that executable name to appear after the start, then waits for that process instead.
 - If a mapper helper is configured, it is started just before the game and closed when the game ends.
 - While a game runs, the launcher hides its window, stops rendering and blocks on the game process, while still handling window messages. When the game ends, it shows its window again, rescans the Library and redraws.
+- The rescan after a game is silent. The "Biblioteca reescaneada: N juegos" status only shows for a manual rescan (F5 or Reescanear), so after a game the menu goes idle straight away.
 - The menu only redraws when something changes: input, a playing preview, an animation in progress, or a status message. An idle menu with no preview playing uses next to no CPU.
 
 ### Kiosk mode (ADR 0001)
@@ -180,23 +183,32 @@ Players can navigate the menu with a gamepad. Games can be paired with an extern
   - Task Manager, the Run dialog and the Windows key are disabled for the user, and for the machine when the launcher has administrator rights;
   - the Start button is removed;
   - Windows is told not to restart the desktop shell, and Ctrl+Alt+Del is disabled (both need administrator rights);
-  - automatic start is registered in the machine's standard Run key (the one under `...\Windows\CurrentVersion\Run`);
+  - automatic start is registered in this user's standard Run key (`HKCU\...\Windows\CurrentVersion\Run`). It is per-user on purpose: Kiosk mode is for fun and must work without administrator rights;
   - the desktop shell is closed, and kept closed while Kiosk mode lasts.
 - A low-level keyboard hook blocks all keys while the menu is showing. It is removed while a game runs and restored when the menu comes back.
-- Quit undoes every setting above, removes the automatic start (from the correct Run key and from the wrong key used by older versions), restarts the desktop shell and exits. It does not log off.
+- Quit undoes every setting above, removes the automatic start (from this user's Run key, and from the machine Run key and the wrong `Windows NT` key used by older versions), restarts the desktop shell and exits. It does not log off.
 - A second command-line switch undoes Kiosk mode without showing any UI, for recovery.
 - The double-click scripts stay as thin wrappers:
   - the kiosk script runs the launcher in Kiosk mode and starts it again whenever it exits with anything other than the Quit exit code;
   - the cleanup script runs the recovery switch.
   Both use only what Windows XP ships with.
-- Kiosk mode writes a plain-text log next to the launcher.
+- Kiosk mode writes what it does (settings applied or not, Quit, recovery) to the troubleshooting log `cyber.log` (see Troubleshooting log), which replaces the old `kiosko.log`.
 - The PowerShell kiosk and cleanup scripts and the separate keyboard blocker are removed. The build stops producing and copying them.
 - In Kiosk mode the menu shows a Quit button and an Organizer button next to the theme button. Outside Kiosk mode, Quit simply exits.
+
+### Troubleshooting log
+
+- One plain-text log, `cyber.log` next to the launcher, is written in both normal and Kiosk mode. It holds the Kiosk lines too.
+- Every scan (start-up, after a game, manual rescan) writes a block: each Available Entry with its resolved Launch target as a full path and the resolution rule that found it (per-laptop override, absolute `exe=`, relative `exe=` in Install folder N, Entry folder, name search, shortcut, automatic choice), then each hidden Entry with its reason and the `exe=` (and per-laptop override) it looked for, if any.
+- Game start, end and failure lines give the exact path launched, its arguments and working folder, and `wait=` and the mapper helper (`con=`) when used.
+- The log is appended to across runs, so a crash and relaunch keeps the history. Once it reaches about 1 MB it is renamed to `cyber.old.log` (replacing any older one) and a new `cyber.log` is started.
+- The scan result exposes which rule found each Launch target, so the rules stay testable through Seam 1. The log text is built by a portable formatter with its own tests; only the file writing is Windows code.
 
 ### Discovery
 
 - Discovery is a new mode of the existing scraper tool, which stays PowerShell for a modern PC. It reuses that tool's database matching, cover/details/description writing and optional preview download.
 - Its input is the Install folders (given as an argument or read from the laptop configuration) and the Master Library. A candidate is a top-level folder of an Install folder that no Entry's Launch target resolves into.
+- Deliberately, a folder name covered by an Entry in one Install folder counts as covered in every Install folder. Two copies of a game are fine: the first listed Install folder wins at launch, so no second Entry is written for the other copy.
 - Executable choice reuses the launcher's scoring rules: prefer names like the folder, avoid installers, uninstallers, setup, servers and similar.
 - It asks on the console only when the match or the executable choice is ambiguous.
 - It writes a new Entry folder with options holding a relative `exe=` (plus `args=` if given), and the fetched cover, details, description and optional preview.

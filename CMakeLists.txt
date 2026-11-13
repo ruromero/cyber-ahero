@@ -48,6 +48,9 @@ set(APP_SOURCES
     src/attract.c
     src/kiosk.c
     src/kiosk_win.c
+    src/cyberlog.c
+    src/cyberlog_win.c
+    src/winproc.c
     third_party/pl_mpeg_impl.c
 )
 

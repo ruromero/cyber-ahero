@@ -1,4 +1,4 @@
-/* Kiosk mode (ticket 05): command line, lockdown plan applied and undone
+/* Kiosk mode: command line, lockdown plan applied and undone
  * through a fake registry/shell, and the log lines. */
 #include "test.h"
 #include "kiosk.h"
@@ -340,36 +340,6 @@ static void test_recovery_ends_running_launchers_before_undoing(void)
     CHECK_INT(f.shell_running, 1);
 }
 
-/* ---- log ------------------------------------------------------------------ */
-
-static void test_log_line_is_timestamped_plain_text(void)
-{
-    KioskTime t = {2026, 11, 3, 9, 5, 7};
-    char buf[128];
-    kiosk_log_line(buf, sizeof(buf), &t, "Juego iniciado: Quake III");
-    CHECK_STR(buf, "2026-11-03 09:05:07  Juego iniciado: Quake III\r\n");
-}
-
-static void test_log_line_is_truncated_but_still_ends_the_line(void)
-{
-    KioskTime t = {2026, 1, 1, 0, 0, 0};
-    char buf[30];
-    kiosk_log_line(buf, sizeof(buf), &t, "a very long message that does not fit");
-    CHECK_INT(strlen(buf), sizeof(buf) - 1);
-    CHECK_STR(buf + strlen(buf) - 2, "\r\n");
-}
-
-static void test_game_events_have_their_own_messages(void)
-{
-    char buf[128];
-    kiosk_game_msg(buf, sizeof(buf), KIOSK_GAME_STARTED, "Doom");
-    CHECK_STR(buf, "Juego iniciado: Doom");
-    kiosk_game_msg(buf, sizeof(buf), KIOSK_GAME_ENDED, "Doom");
-    CHECK_STR(buf, "Juego terminado: Doom");
-    kiosk_game_msg(buf, sizeof(buf), KIOSK_GAME_FAILED, "Doom");
-    CHECK_STR(buf, "ERROR: no se pudo iniciar Doom");
-}
-
 int main(void)
 {
     RUN_TEST(test_no_arguments_is_an_ordinary_window);
@@ -384,8 +354,5 @@ int main(void)
     RUN_TEST(test_leaving_removes_the_automatic_start_left_by_older_versions);
     RUN_TEST(test_leaving_without_admin_reports_what_could_not_be_undone);
     RUN_TEST(test_recovery_ends_running_launchers_before_undoing);
-    RUN_TEST(test_log_line_is_timestamped_plain_text);
-    RUN_TEST(test_log_line_is_truncated_but_still_ends_the_line);
-    RUN_TEST(test_game_events_have_their_own_messages);
     return TEST_REPORT();
 }

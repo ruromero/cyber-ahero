@@ -4,6 +4,7 @@
 #include "text.h"
 #include "launch.h"
 #include "kiosk.h"
+#include "cyberlog.h"
 #include "util.h"
 #include "pad_sdl.h"
 #include "redraw.h"
@@ -67,18 +68,18 @@ typedef struct App {
     int pad;
     int radius;
 
-    /* ticket 08: gamepad navigation */
+    /* gamepad navigation */
     PadNav pads;
 
-    /* ticket 06: Organizer view and rescan */
+    /* Organizer view and rescan */
     const char *lib_root;
     const struct LaptopConfig *cfg;
     OrganizerReport *org;   /* rows of the Organizer view, while it is open */
     int org_open;
     int org_scroll;         /* first visible row */
-    /* ticket 10: Attract mode */
+    /* Attract mode */
     Attract attract;
-    /* ticket 05: Kiosk mode */
+    /* Kiosk mode */
     int kiosk;
     int quit;               /* the Quit button ended the menu */
 } App;
@@ -707,7 +708,7 @@ static void pad_menu_action(App *a, const SDL_Rect *grid, PadAction act)
 {
     if (act == PAD_ACT_NONE)
         return;
-    if (a->org_open) { /* ticket 06: the Organizer view is modal */
+    if (a->org_open) { /* the Organizer view is modal */
         if (act == PAD_ACT_CLOSE)
             organizer_close(a);
         return;
@@ -731,17 +732,15 @@ static void pad_menu_action(App *a, const SDL_Rect *grid, PadAction act)
     }
 }
 
-static void app_rescan(App *a); /* ticket 06 section below */
+static void app_rescan(App *a, ScanCause why); /* Organizer view section below */
 
-/* Ticket 05: in Kiosk mode the log records games, and the keyboard is only
-   blocked while the menu shows. */
-static void kiosk_game_event(App *a, KioskGameEvent ev, const char *name)
+/* The troubleshooting log records every game with what was launched. */
+static void log_game(LogGameEvent ev, const Game *g)
 {
-    if (!a->kiosk)
-        return;
-    char buf[300];
-    kiosk_game_msg(buf, sizeof(buf), ev, name);
-    kiosk_win_log(buf);
+    LaunchTarget t = game_launch_target(g);
+    char buf[2048];
+    cyberlog_game(buf, sizeof(buf), ev, g->name, &t);
+    cyber_log(buf);
 }
 
 static void hide_menu(void *user)
@@ -750,7 +749,7 @@ static void hide_menu(void *user)
     SDL_HideWindow(a->win);
     if (a->kiosk)
         kiosk_win_keyboard(0);
-    kiosk_game_event(a, KIOSK_GAME_STARTED, a->lib->games[a->selected].name);
+    log_game(LOG_GAME_STARTED, &a->lib->games[a->selected]);
     if (attract_game_running(&a->attract, 1, SDL_GetTicks()))
         stop_video(a);
 }
@@ -764,14 +763,7 @@ static void launch(App *a)
         return;
     Game *g = &a->lib->games[i];
     stop_video(a);
-    LaunchTarget t;
-    t.exe = g->exe;
-    t.shortcut = g->exe ? NULL : g->shortcut;
-    t.args = g->args;
-    t.work_dir = g->work_dir;
-    t.wait = g->wait;
-    t.con = g->con;
-    t.con_args = g->con_args;
+    LaunchTarget t = game_launch_target(g);
 
     int helper_failed = 0;
     LaunchResult r = launch_and_wait(proc_win(), &t, hide_menu, a, &helper_failed);
@@ -779,10 +771,10 @@ static void launch(App *a)
         char buf[300];
         SDL_snprintf(buf, sizeof(buf), "No se pudo iniciar %s", g->name);
         app_status(a, buf);
-        kiosk_game_event(a, KIOSK_GAME_FAILED, g->name);
+        log_game(LOG_GAME_FAILED, g);
         return;
     }
-    kiosk_game_event(a, KIOSK_GAME_ENDED, g->name);
+    log_game(LOG_GAME_ENDED, g);
     if (a->kiosk)
         kiosk_win_keyboard(1);
 
@@ -793,15 +785,17 @@ static void launch(App *a)
     SDL_FlushEvents(SDL_JOYAXISMOTION, SDL_JOYBUTTONUP);
     SDL_FlushEvents(SDL_CONTROLLERAXISMOTION, SDL_CONTROLLERBUTTONUP);
     attract_game_running(&a->attract, 0, SDL_GetTicks());
-    /* ticket 09: g is freed by the rescan, so the message is made first */
+    /* g is freed by the rescan, so the message is made first */
     char helper_msg[300];
     helper_msg[0] = 0;
     if (helper_failed) {
         SDL_snprintf(helper_msg, sizeof(helper_msg),
                      "No se pudo iniciar el mapeador del mando de %s", g->name);
-        SDL_Log("%s (con=%s)", helper_msg, g->con);
+        char line[1024];
+        SDL_snprintf(line, sizeof(line), "ERROR: %s (con=%s)", helper_msg, g->con);
+        cyber_log(line);
     }
-    app_rescan(a);
+    app_rescan(a, SCAN_AFTER_GAME);
     if (helper_msg[0])
         app_status(a, helper_msg);
     a->leave_time = SDL_GetTicks() - 1000000;
@@ -884,7 +878,7 @@ static void update(App *a)
 }
 
 /* How long the loop may sleep waiting for events before the menu must be
-   drawn again (ticket 03: an idle menu draws nothing). Mirrors update(). */
+   drawn again (an idle menu draws nothing). Mirrors update(). */
 static int menu_wait_ms(const App *a)
 {
     Redraw r;
@@ -904,7 +898,7 @@ static int menu_wait_ms(const App *a)
     return redraw_wait_ms(&r, SDL_GetTicks());
 }
 
-/* ---- ticket 10: Attract mode ------------------------------------------ */
+/* ---- Attract mode ------------------------------------------ */
 
 /* Mouse, keyboard or pad button input (pad sticks/hats count through
    their menu action, see the pad case in app_run). */
@@ -916,11 +910,9 @@ static int attract_is_input(const SDL_Event *e)
     case SDL_MOUSEBUTTONDOWN:
     case SDL_MOUSEWHEEL:
     case SDL_KEYDOWN:
-    case SDL_JOYBUTTONDOWN:
-    case SDL_CONTROLLERBUTTONDOWN:
         return 1;
     default:
-        return 0;
+        return pad_sdl_kind(e) == PAD_EVENT_BUTTON;
     }
 }
 
@@ -1189,9 +1181,9 @@ static void draw_theme_button(App *a, int w)
                       hov ? COL_HDR_M : COL_HDR_L, dots, 4);
 }
 
-/* ---- ticket 06: Organizer view and rescan -------------------------------- */
+/* ---- Organizer view and rescan -------------------------------- */
 
-/* F5 only rescans outside Kiosk mode (ticket 05). */
+/* F5 only rescans outside Kiosk mode. */
 static int app_in_kiosk(const App *a)
 {
     return a->kiosk;
@@ -1231,10 +1223,11 @@ static void app_caches_free(App *a)
     a->icons_w = a->icons_h = a->covers_w = a->covers_h = NULL;
 }
 
-/* Scans the Library again and refreshes the menu (and the Organizer view, if
-   open). The per-Entry texture caches are sized by the Library, so they are
-   freed and allocated again. */
-static void app_rescan(App *a)
+/* Scans the Library again, writes the scan to the log and refreshes the menu
+   (and the Organizer view, if open). The per-Entry texture caches are sized
+   by the Library, so they are freed and allocated again. Only a manual
+   rescan is announced on screen: after a game the menu stays idle. */
+static void app_rescan(App *a, ScanCause why)
 {
     stop_video(a);
     a->selected = -1;
@@ -1242,15 +1235,18 @@ static void app_rescan(App *a)
     app_caches_free(a);
     library_free(a->lib);
     a->lib = library_scan(fs_win(), a->lib_root, a->cfg);
+    cyber_log_scan(a->lib, why);
     app_caches_alloc(a);
     if (a->org) {
         a->org_scroll = 0;
         organizer_report_free(a->org);
         a->org = organizer_report(a->lib);
     }
-    char buf[128];
-    SDL_snprintf(buf, sizeof(buf), "Biblioteca reescaneada: %d juegos", a->lib->count);
-    app_status(a, buf);
+    if (why == SCAN_MANUAL) {
+        char buf[128];
+        SDL_snprintf(buf, sizeof(buf), "Biblioteca reescaneada: %d juegos", a->lib->count);
+        app_status(a, buf);
+    }
 }
 
 static SDL_Rect organizer_button_rect(App *a, int w)
@@ -1286,7 +1282,7 @@ static void draw_organizer_button(App *a, int w)
     }
 }
 
-/* ---- ticket 05: Quit button, left of the Organizer button ---------------- */
+/* ---- Quit button, left of the Organizer button ---------------- */
 
 static SDL_Rect quit_button_rect(App *a, int w)
 {
@@ -1467,7 +1463,7 @@ static int organizer_click(App *a, int x, int y)
     OrgLayout L;
     organizer_layout(a, w, h, &L);
     if (in_rect(L.rescan, x, y))
-        app_rescan(a);
+        app_rescan(a, SCAN_MANUAL);
     else if (in_rect(L.close, x, y))
         organizer_close(a);
     else if (in_rect(L.up, x, y))
@@ -1499,7 +1495,7 @@ static int organizer_key(App *a, SDL_Keycode k, Uint16 mod)
     return 1;
 }
 
-/* ---- end ticket 06 -------------------------------------------------------- */
+/* ---- end of Organizer view ---------------------------------------------------- */
 
 static void draw(App *a)
 {
@@ -1662,6 +1658,7 @@ int app_run(const char *library_root, const struct LaptopConfig *cfg, int kiosk)
     a.lib_root = library_root;
     a.cfg = cfg;
     a.lib = library_scan(fs_win(), library_root, cfg);
+    cyber_log_scan(a.lib, SCAN_STARTUP);
     app_caches_alloc(&a);
     a.theme = 0;
     theme_apply(a.theme);
@@ -1690,7 +1687,7 @@ int app_run(const char *library_root, const struct LaptopConfig *cfg, int kiosk)
                 a.mouse_y = e.motion.y;
                 a.mouse_active = 1;
                 if (a.org_open)
-                    break; /* ticket 06: no hover selection behind the view */
+                    break; /* no hover selection behind the view */
                 {
                     int idx = hit_test(&a, &grid, e.motion.x, e.motion.y);
                     if (idx >= 0 && a.pinned < 0)
@@ -1704,9 +1701,9 @@ int app_run(const char *library_root, const struct LaptopConfig *cfg, int kiosk)
             case SDL_MOUSEBUTTONDOWN:
                 a.mouse_active = 1;
                 if (e.button.button == SDL_BUTTON_LEFT && quit_click(&a, e.button.x, e.button.y)) {
-                    /* ticket 05: Quit button */
+                    /* Quit button */
                 } else if (e.button.button == SDL_BUTTON_LEFT && organizer_click(&a, e.button.x, e.button.y)) {
-                    /* ticket 06: Organizer button or view */
+                    /* Organizer button or view */
                 } else if (e.button.button == SDL_BUTTON_LEFT) {
                     int w = BASE_W, h = BASE_H;
                     SDL_GetRendererOutputSize(ren, &w, &h);
@@ -1797,26 +1794,19 @@ int app_run(const char *library_root, const struct LaptopConfig *cfg, int kiosk)
                     break;
                 case SDLK_F5:
                     if (!app_in_kiosk(&a))
-                        app_rescan(&a);
+                        app_rescan(&a, SCAN_MANUAL);
                     break;
                 default:
                     break;
                 }
                 break;
-            case SDL_JOYDEVICEADDED:
-            case SDL_JOYDEVICEREMOVED:
-            case SDL_JOYBUTTONDOWN:
-            case SDL_JOYHATMOTION:
-            case SDL_JOYAXISMOTION:
-            case SDL_CONTROLLERBUTTONDOWN:
-            case SDL_CONTROLLERAXISMOTION: {
-                PadAction act = pad_sdl_event(&a.pads, &e);
-                if (act != PAD_ACT_NONE && attract_wake(&a))
-                    break;
-                pad_menu_action(&a, &grid, act);
-                break;
-            }
             default:
+                if (pad_sdl_kind(&e) != PAD_EVENT_NONE) {
+                    PadAction act = pad_sdl_event(&a.pads, &e);
+                    if (act != PAD_ACT_NONE && attract_wake(&a))
+                        break;
+                    pad_menu_action(&a, &grid, act);
+                }
                 break;
             }
         }

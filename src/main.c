@@ -1,5 +1,6 @@
 #include "app.h"
 #include "config.h"
+#include "cyberlog.h"
 #include "kiosk.h"
 #include "util.h"
 
@@ -31,7 +32,7 @@ static void enter_kiosk(void)
     if (failed) {
         char msg[128];
         snprintf(msg, sizeof(msg), "AVISO: %d ajustes del modo kiosko no se aplicaron", failed);
-        kiosk_win_log(msg);
+        cyber_log(msg);
     }
 }
 
@@ -39,15 +40,17 @@ int main(int argc, char **argv)
 {
     CliArgs args = cli_parse(argc, argv);
     if (args.mode == MODE_RECOVER) {
-        kiosk_win_log("Recuperacion (--limpiar)");
+        cyber_log("Recuperacion (--limpiar)");
         kiosk_recover(kiosk_win());
         return 0;
     }
 
     int kiosk = args.mode == MODE_KIOSK;
     if (kiosk) {
-        kiosk_win_log("Modo kiosko iniciado");
+        cyber_log("Modo kiosko iniciado");
         enter_kiosk();
+    } else {
+        cyber_log("Launcher iniciado");
     }
 
     LaptopConfig *cfg = load_laptop_config();
@@ -59,14 +62,18 @@ int main(int argc, char **argv)
     if (rc == APP_QUIT) {
         rc = 0;
         if (kiosk) {
-            kiosk_win_log("Salir: se deja el modo kiosko");
+            cyber_log("Salir: se deja el modo kiosko");
             kiosk_leave(kiosk_win());
             rc = KIOSK_EXIT_QUIT;
+        } else {
+            cyber_log("Launcher cerrado");
         }
-    } else if (kiosk) {
+    } else if (!kiosk) {
+        cyber_log("Launcher cerrado");
+    } else {
         char msg[96];
         snprintf(msg, sizeof(msg), "El launcher termino sin Salir (codigo %d)", rc);
-        kiosk_win_log(msg);
+        cyber_log(msg);
     }
     return rc;
 }

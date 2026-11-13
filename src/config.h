@@ -22,7 +22,7 @@ const char *laptop_config_get(const LaptopConfig *cfg, const char *key);
 char *laptop_config_library_root(const LaptopConfig *cfg, const char *arg, const char *env,
                                  const char *exe_dir);
 
-/* --- One Library for every laptop (ticket 02) --- */
+/* --- One Library for every laptop --- */
 
 /* Install folders from installs= (separated by ';', trimmed, empty parts
  * skipped), in listed order. Returns a malloc'd NULL-terminated array (never
@@ -33,7 +33,7 @@ void laptop_config_list_free(char **list);
 /* The per-laptop override exe.<entry folder name>=<path>, or NULL. */
 const char *laptop_config_exe_override(const LaptopConfig *cfg, const char *entry_folder);
 
-/* ticket 10: attract= idle minutes before Attract mode. 3 when absent or
+/* attract= idle minutes before Attract mode. 3 when absent or
  * not a whole number >= 0; 0 turns Attract mode off; capped at one week. */
 #define ATTRACT_DEFAULT_MINUTES 3
 #define ATTRACT_MAX_MINUTES (7 * 24 * 60)

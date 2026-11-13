@@ -3,7 +3,7 @@
 
 struct LaptopConfig;
 
-/* app_run's result when the Quit button ended it (ticket 05). */
+/* app_run's result when the Quit button ended it. */
 #define APP_QUIT 2
 
 /* kiosk: Kiosk mode (keyboard blocked while the menu shows, Esc and F5 do

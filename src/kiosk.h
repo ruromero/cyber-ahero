@@ -2,9 +2,9 @@
 #define KIOSK_H
 
 /*
- * Kiosk mode (ticket 05, ADR 0001). Portable: the registry and the desktop
- * shell are reached through a KioskApi, so the lockdown can be tested with
- * a fake. The Win32 implementation is kiosk_win() (kiosk_win.c).
+ * Kiosk mode (ADR 0001). Portable: the registry and the desktop shell are
+ * reached through a KioskApi, so the lockdown can be tested with a fake.
+ * The Win32 implementation is kiosk_win() (kiosk_win.c).
  */
 
 /* ---- command line ---- */
@@ -53,44 +53,24 @@ typedef struct KioskApi {
     void (*log)(void *ctx, const char *msg);
 } KioskApi;
 
-/* Applies the lockdown, registers autostart_cmd in the standard Run key and
- * closes the shell. Logs every setting. Returns how many settings could not
+/* Applies the lockdown, registers autostart_cmd in this user's standard Run
+ * key (HKCU, so no administrator rights are needed) and closes the shell. Logs every setting. Returns how many settings could not
  * be applied (e.g. machine-wide ones without administrator rights). */
 int kiosk_enter(const KioskApi *api, const char *autostart_cmd);
 
 /* Undoes every setting kiosk_enter applies, removes the automatic start
- * (also from the wrong key older versions used) and starts the shell. Does
+ * (also from the machine Run key and the wrong key older versions used) and
+ * starts the shell. Does
  * not log off. Returns how many settings could not be undone. */
 int kiosk_leave(const KioskApi *api);
 
 /* The recovery switch: ends any running launcher, then kiosk_leave. */
 int kiosk_recover(const KioskApi *api);
 
-/* Win32 (kiosk_win.c, app only): the real registry and explorer.exe, a log
- * appended to kiosko.log next to the launcher, and the keyboard hook. */
+/* Win32 (kiosk_win.c, app only): the real registry and explorer.exe, the
+ * troubleshooting log (cyber.log, see cyberlog.h), and the keyboard hook. */
 const KioskApi *kiosk_win(void);
-void kiosk_win_log(const char *msg);
 /* 1: swallow every key (menu showing); 0: release the keyboard (game). */
 void kiosk_win_keyboard(int block);
-
-/* ---- log (kiosko.log next to the launcher) ---- */
-
-#include <stddef.h>
-
-typedef struct KioskTime {
-    int year, month, day, hour, minute, second;
-} KioskTime;
-
-/* "YYYY-MM-DD HH:MM:SS  <msg>\r\n" into buf (truncated, always ending the
- * line). */
-void kiosk_log_line(char *buf, size_t n, const KioskTime *t, const char *msg);
-
-typedef enum KioskGameEvent {
-    KIOSK_GAME_STARTED,
-    KIOSK_GAME_ENDED,
-    KIOSK_GAME_FAILED
-} KioskGameEvent;
-
-void kiosk_game_msg(char *buf, size_t n, KioskGameEvent ev, const char *game);
 
 #endif

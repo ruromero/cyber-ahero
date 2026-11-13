@@ -1,14 +1,14 @@
-/* Win32 side of Kiosk mode (ticket 05). XP-compatible APIs only: the
- * registry (RegCreateKeyExA, RegSetValueExA, RegDeleteValueA), Toolhelp
- * process lists, TerminateProcess/CreateProcessA for explorer.exe, and a
+/* Win32 side of Kiosk mode. XP-compatible APIs only: the registry
+ * (RegCreateKeyExA, RegSetValueExA, RegDeleteValueA), Toolhelp process lists
+ * (winproc.c), TerminateProcess/CreateProcessA for explorer.exe, and a
  * WH_KEYBOARD_LL hook on its own thread. */
 #include "kiosk.h"
+#include "cyberlog.h"
 #include "util.h"
+#include "winproc.h"
 
 #include <windows.h>
-#include <tlhelp32.h>
 
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -79,40 +79,33 @@ static int w_remove_value(void *ctx, KioskScope scope, const char *key, const ch
 
 /* ---- processes ------------------------------------------------------------ */
 
+static int terminate_one(void *user, DWORD pid)
+{
+    HANDLE p = OpenProcess(PROCESS_TERMINATE, FALSE, pid);
+    if (p) {
+        TerminateProcess(p, *(UINT *)user);
+        CloseHandle(p);
+    }
+    return 1;
+}
+
 /* Ends every other process named exe_name with exit code `code`. */
 static void kill_named(const char *exe_name, UINT code)
 {
-    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-    if (snap == INVALID_HANDLE_VALUE)
-        return;
-    PROCESSENTRY32 pe;
-    memset(&pe, 0, sizeof(pe));
-    pe.dwSize = sizeof(pe);
-    DWORD self = GetCurrentProcessId();
-    for (BOOL more = Process32First(snap, &pe); more; more = Process32Next(snap, &pe)) {
-        if (pe.th32ProcessID == self || _stricmp(path_basename(pe.szExeFile), exe_name) != 0)
-            continue;
-        HANDLE p = OpenProcess(PROCESS_TERMINATE, FALSE, pe.th32ProcessID);
-        if (p) {
-            TerminateProcess(p, code);
-            CloseHandle(p);
-        }
-    }
-    CloseHandle(snap);
+    winproc_each_named(exe_name, terminate_one, &code);
+}
+
+static int note_found(void *user, DWORD pid)
+{
+    (void)pid;
+    *(int *)user = 1;
+    return 0;
 }
 
 static int shell_running(void)
 {
-    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-    if (snap == INVALID_HANDLE_VALUE)
-        return 0;
-    PROCESSENTRY32 pe;
-    memset(&pe, 0, sizeof(pe));
-    pe.dwSize = sizeof(pe);
     int found = 0;
-    for (BOOL more = Process32First(snap, &pe); more && !found; more = Process32Next(snap, &pe))
-        found = _stricmp(path_basename(pe.szExeFile), "explorer.exe") == 0;
-    CloseHandle(snap);
+    winproc_each_named("explorer.exe", note_found, &found);
     return found;
 }
 
@@ -158,14 +151,9 @@ static void w_start_shell(void *ctx)
     if (n == 0 || n >= sizeof(dir))
         strcpy(dir, "C:\\WINDOWS");
     char *exe = path_join(dir, "explorer.exe");
-    STARTUPINFOA si;
-    PROCESS_INFORMATION pi;
-    memset(&si, 0, sizeof(si));
-    si.cb = sizeof(si);
-    if (CreateProcessA(exe, NULL, NULL, NULL, FALSE, 0, NULL, dir, &si, &pi)) {
-        CloseHandle(pi.hThread);
-        CloseHandle(pi.hProcess);
-    }
+    HANDLE p = winproc_spawn(exe, NULL, dir, NULL);
+    if (p)
+        CloseHandle(p);
     free(exe);
 }
 
@@ -185,18 +173,7 @@ static void w_stop_launchers(void *ctx)
 static void w_log(void *ctx, const char *msg)
 {
     (void)ctx;
-    char *path = path_join(exe_dir(), "kiosko.log");
-    FILE *f = fopen(path, "ab");
-    free(path);
-    if (!f)
-        return;
-    SYSTEMTIME st;
-    GetLocalTime(&st);
-    KioskTime t = {st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond};
-    char line[512];
-    kiosk_log_line(line, sizeof(line), &t, msg);
-    fputs(line, f);
-    fclose(f);
+    cyber_log(msg);
 }
 
 const KioskApi *kiosk_win(void)
@@ -204,11 +181,6 @@ const KioskApi *kiosk_win(void)
     static const KioskApi api = {NULL, w_set_dword, w_set_string, w_remove_value,
                                  w_stop_shell, w_start_shell, w_stop_launchers, w_log};
     return &api;
-}
-
-void kiosk_win_log(const char *msg)
-{
-    w_log(NULL, msg);
 }
 
 /* ---- keyboard hook ---------------------------------------------------------- */
@@ -234,7 +206,7 @@ static DWORD WINAPI kbd_main(LPVOID arg)
     HHOOK hook = SetWindowsHookExA(WH_KEYBOARD_LL, kbd_proc, GetModuleHandleA(NULL), 0);
     SetEvent(kbd_ready);
     if (!hook) {
-        kiosk_win_log("ERROR: no se pudo instalar el bloqueo de teclado");
+        cyber_log("ERROR: no se pudo instalar el bloqueo de teclado");
         return 1;
     }
     while (GetMessageA(&msg, NULL, 0, 0) > 0) {

@@ -2,11 +2,11 @@
 #define LAUNCH_H
 
 /*
- * Starting a game and waiting for it to end (ticket 04). Portable: every
+ * Starting a game and waiting for it to end. Portable: every
  * call into the operating system goes through a ProcApi, so the flow can be
  * tested with a fake. The Win32 implementation is proc_win() (launch_win.c).
  *
- *   0. with con= set, start the gamepad mapper helper (ticket 09) in its
+ *   0. with con= set, start the gamepad mapper helper in its
  *      own folder; if it can't be started the game starts anyway;
  *   1. start the Launch target: an executable gets a command line
  *      ("<exe>" <args>) and its working folder; a shortcut is opened
@@ -47,7 +47,7 @@ typedef struct ProcApi {
     void (*sleep_ms)(void *ctx, int ms);
     uint32_t (*ticks)(void *ctx);
     void (*close)(void *ctx, ProcHandle proc);
-    /* Mapper helper (ticket 09). start_helper starts exe like start_exe and
+    /* Mapper helper. start_helper starts exe like start_exe and
      * returns it, or NULL on failure. stop_helper closes it (politely, then
      * by force after a short timeout) and releases the handle. */
     ProcHandle (*start_helper)(void *ctx, const char *exe, const char *cmdline,
