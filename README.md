@@ -184,6 +184,40 @@ Windows; si no devuelve ninguno (p. ej. un `.lnk` a algo que no es un
 programa), el menú vuelve enseguida, salvo que se indique `wait=`. Si el juego
 no se puede arrancar, el menú muestra *No se pudo iniciar <juego>*.
 
+### Mando en juegos que solo entienden teclado (`con=`, `con_args=`)
+
+Para juegos antiguos sin soporte de mando, el juego puede ir acompañado de un
+**mapeador externo de mando a teclado** (por ejemplo
+[JoyToKey](https://joytokey.net/)) y sus argumentos, normalmente el perfil:
+
+```
+exe=Doom\doom.exe
+con=JoyToKey\JoyToKey.exe          <- mapeador de mando a teclado
+con_args=Doom                       <- sus argumentos (aquí, el perfil)
+```
+
+- **`con=`**: ejecutable del mapeador. Se resuelve igual que un `exe=`: una
+  ruta absoluta se usa tal cual; una relativa se busca en cada carpeta de
+  instalación (`installs=`) en orden, luego en la carpeta del juego (o la del
+  `juego.cfg`) y por último por nombre de archivo hasta dos niveles dentro de
+  las carpetas de instalación. Si no se encuentra, el juego **no** se oculta.
+- **`con_args=`**: se pasan tal cual al mapeador, detrás de su ruta entre
+  comillas. Con JoyToKey, el argumento es el nombre del perfil
+  (`Doom` carga `Doom.cfg` de la carpeta de JoyToKey).
+
+El mapeador arranca en su propia carpeta **justo antes** que el juego y se
+**cierra cuando el juego termina**, antes de que vuelva el menú: primero se le
+pide que cierre sus ventanas y, si a los 2 segundos sigue abierto, se termina.
+Así nunca se queda funcionando en el menú ni en el siguiente juego. Si el
+mapeador no se puede arrancar, el juego arranca igual y al volver el menú
+muestra *No se pudo iniciar el mapeador del mando de <juego>* (también queda en
+el log). Sin `con=`, todo funciona como siempre.
+
+Consejo: instala JoyToKey en una carpeta de instalación (p. ej.
+`C:\Juegos\JoyToKey`) con un perfil por juego, y no lo dejes en el arranque de
+Windows: si ya hubiera otra copia abierta, JoyToKey podría pasarle el perfil y
+cerrarse, y el lanzador no podría cerrar la que ya estaba.
+
 ## Una biblioteca para todos los portátiles
 
 La misma carpeta `games` (la biblioteca maestra) se copia tal cual a todos los
@@ -426,6 +460,53 @@ Con `-Video` también descarga un vídeo por juego (`preview.mpg`, MPEG-1): busc
 PATH (`winget install yt-dlp`) y **`ffmpeg`**. La búsqueda automática puede fallar
 en títulos ambiguos; revísalos. Úsalo para tus copias personales.
 
+### Descubrir juegos nuevos (`-Discover`)
+
+En el PC moderno que tiene la copia maestra de las instalaciones, el modo
+descubrimiento crea las entradas que faltan en la biblioteca maestra:
+
+```
+tools\scrape.cmd -Discover -DryRun                        (solo muestra lo que crearía)
+tools\scrape.cmd -Discover                                (usa installs= de cyber.cfg)
+tools\scrape.cmd -Discover -Installs "C:\Juegos;D:\Games" -Root D:\games
+tools\scrape.cmd -Discover -Video                         (además, vídeo de preview)
+tools\scrape.cmd -Discover -Force                         (rehace entradas con el mismo nombre)
+```
+
+- **Candidatos**: cada carpeta de primer nivel de una carpeta de instalación
+  (`-Installs`, o `installs=` de `cyber.cfg`) a la que no llega ninguna
+  entrada. Para decidirlo aplica las mismas reglas que el lanzador (override
+  `exe.<carpeta>=`, `exe=` absoluto, `exe=` relativo en cada carpeta de
+  instalación, búsqueda por nombre del ejecutable a dos niveles, accesos
+  directos). Una carpeta que ya tiene entrada en una carpeta de instalación no
+  se vuelve a proponer aunque haya otra copia con el mismo nombre en otra.
+- **Ejecutable**: busca `.exe` en la carpeta del juego (si no hay, un nivel más
+  abajo, y luego otro) y los puntúa como el lanzador: gana el que se llama como
+  la carpeta; instaladores, desinstaladores, `setup`, servidores, `config`,
+  `update` y `crash` puntúan muy bajo.
+- **Entrada escrita**: `games\<carpeta>\juego.cfg` con `exe=<carpeta>\...`
+  relativo a la carpeta de instalación (y `args=` si se dieron, `nombre=` si
+  el nombre de IGDB es distinto del de la carpeta), más carátula, `details.txt`
+  y `descripcion.txt` de IGDB, y `preview.mpg` con `-Video`. Así la entrada
+  funciona en cualquier portátil que tenga el juego con el mismo nombre de
+  carpeta en alguna de sus carpetas de instalación.
+- **Preguntas**: solo cuando no está seguro. Pregunta **qué juego es** si IGDB
+  no devuelve exactamente un resultado con el nombre de la carpeta (número de
+  la lista, otro nombre para buscar, o Enter para dejarla sin datos), y **qué
+  ejecutable y con qué argumentos** si hay varios candidatos sin un claro
+  ganador (número, ruta relativa, o Enter para el propuesto; Enter en los
+  argumentos = ninguno).
+- `-DryRun` no escribe nada ni pregunta nada: lista las entradas que crearía,
+  con el ejecutable propuesto y las preguntas que haría.
+- No toca entradas existentes: si ya existe `games\<carpeta>` (aunque no
+  apunte a nada) la omite; `-Force` la rehace. Ejecutarlo dos veces no crea
+  duplicados, porque las entradas escritas ya apuntan a sus instalaciones.
+- `-LaptopConfig <ruta>` usa otro `cyber.cfg` (por defecto el de la raíz del
+  repositorio).
+
+Los tests de este modo (Pester) están en `tools\tests\`:
+`Invoke-Pester tools\tests` (ver [docs/dev-setup.md](docs/dev-setup.md)).
+
 ## Modo kiosko
 
 El propio `cyber_ahero.exe` deja el portátil bloqueado en el menú de juegos.
@@ -483,6 +564,7 @@ simplemente cierran, y F5 reescanea.
 src/           código de la aplicación
 third_party/   pl_mpeg.h (decodificador MPEG-1, cabecera única MIT)
 tools/         scripts de dependencias, build, conversión de vídeo y scraping
+tools/tests/   tests Pester de scrape.ps1 (descubrimiento)
 games/         los juegos (cada subcarpeta es un juego, con su carátula y ficha)
 assets/        logo
 deps/          dependencias descargadas (SDL)
