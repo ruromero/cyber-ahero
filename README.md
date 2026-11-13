@@ -45,6 +45,8 @@ Pensado para funcionar en **Windows XP de 32 bits** y también en Windows de
 | Moverse con mando | Cruceta o stick izquierdo |
 | Abrir el juego con mando | Botón A (en mandos antiguos, botón 1) |
 | Cerrar la ficha con mando | Botón B (en mandos antiguos, botón 2) |
+| Abrir el Organizador | Botón de lista junto al de tema (arriba a la derecha) |
+| Reescanear la biblioteca | F5 (fuera del modo kiosko) o botón Reescanear del Organizador |
 
 Sirven los mandos tipo Xbox y los mandos DirectInput antiguos; se pueden
 conectar o desconectar con el menú abierto. El mando solo controla el menú:
@@ -193,6 +195,27 @@ exe.Quake III=C:\Archivos de programa\Quake III Arena\quake3.exe
 Aquí el override manda: se lanza el Quake instalado con su instalador. Sin esa
 línea se encontraría también `E:\JUEGOS\Quake 3 Arena\quake3.exe` gracias a
 la búsqueda por nombre.
+
+## Vista Organizador
+
+Para preparar un portátil sin salir del menú: el botón con forma de lista, junto
+al botón de tema (arriba a la derecha), abre la vista **Organizador** de la
+biblioteca de este portátil. Muestra:
+
+- arriba, cuántos juegos hay **disponibles**, **ocultos** e **incompletos**;
+- los juegos **ocultos** y por qué: *sin información para lanzarlo* (la carpeta
+  no tiene acceso directo, ni `exe=`, ni ejecutable) o *instalación no
+  encontrada* (la hay, pero el juego no está instalado en este portátil);
+- los juegos disponibles a los que les **falta** portada (`cover.png`),
+  vista previa (`preview.mpg`) o ficha (`details.txt`), con lo que falta.
+
+Los juegos completos no aparecen. Si la lista no cabe, se desplaza con la rueda
+del ratón o con los botones `^` y `v`. Todo se maneja solo con el ratón.
+
+**Reescanear** vuelve a leer la biblioteca y actualiza el menú y la vista: tras
+instalar un juego o arreglar su `juego.cfg`, pulsarlo basta para verlo, sin
+reiniciar el launcher. Fuera del modo kiosko, **F5** hace lo mismo desde
+cualquier pantalla. **Cerrar**, Esc o un clic fuera del recuadro vuelven al menú.
 
 ## Elegir la ruta de la biblioteca
 

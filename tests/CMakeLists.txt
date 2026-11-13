@@ -26,4 +26,5 @@ cyber_test(test_library test_library.c fake_fs.c ${CYBER_SRC}/library.c ${CYBER_
 cyber_test(test_config test_config.c ${CYBER_SRC}/config.c ${CYBER_SRC}/util.c)
 cyber_test(test_pad test_pad.c ${CYBER_SRC}/pad.c)
 cyber_test(test_redraw test_redraw.c ${CYBER_SRC}/redraw.c)
+cyber_test(test_organizer test_organizer.c fake_fs.c ${CYBER_SRC}/organizer.c ${CYBER_SRC}/library.c ${CYBER_SRC}/config.c ${CYBER_SRC}/util.c)
 cyber_test(test_attract test_attract.c ${CYBER_SRC}/attract.c)
