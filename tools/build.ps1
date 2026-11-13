@@ -98,39 +98,20 @@ $lines = @()
 if (Test-Path -LiteralPath $games) { $lines += "library=games" }
 Set-Content -LiteralPath $cfg -Value $lines -Encoding ASCII
 
-# Los scripts de kiosco van en tools\ dentro del build; los .bat, en la raiz
-# (para lanzarlos con doble clic).
-$toolsBin = Join-Path $bdir "tools"
-New-Item -ItemType Directory -Force -Path $toolsBin | Out-Null
-foreach ($s in @("kiosko.ps1", "limpiador.ps1")) {
-    $src = Join-Path $root "tools\$s"
-    if (Test-Path -LiteralPath $src) {
-        Copy-Item -LiteralPath $src -Destination $toolsBin -Force
-    }
-}
+# Modo kiosko: lo hace el propio cyber_ahero.exe (--kiosko / --limpiar).
+# Los .bat de doble clic van en la raiz, junto al .exe.
 foreach ($s in @("kiosko.bat", "limpiar.bat")) {
     $src = Join-Path $root "tools\$s"
     if (Test-Path -LiteralPath $src) {
         Copy-Item -LiteralPath $src -Destination (Join-Path $bdir $s) -Force
     }
 }
-# Limpia copias antiguas de los .ps1 en la raiz (ahora viven en tools\)
-foreach ($s in @("kiosko.ps1", "limpiador.ps1", "autologon.ps1", "autologon.bat")) {
+# Restos de versiones antiguas del modo kiosko (PowerShell y kbdblock.exe)
+foreach ($s in @("kiosko.ps1", "limpiador.ps1", "autologon.ps1", "autologon.bat", "kbdblock.exe",
+                 "tools\kiosko.ps1", "tools\limpiador.ps1")) {
     $stale = Join-Path $bdir $s
     if (Test-Path -LiteralPath $stale) { Remove-Item -LiteralPath $stale -Force }
 }
-Write-Host "Scripts de kiosko copiados -> $toolsBin"
-
-# Bloqueador de teclado del modo kiosko (hook global WH_KEYBOARD_LL)
-$kbdSrc = Join-Path $root "tools\kbdblock.c"
-if ($CC -and (Test-Path -LiteralPath $kbdSrc)) {
-    $kbdExe = Join-Path $bdir "kbdblock.exe"
-    & $CC $kbdSrc -o $kbdExe -mwindows -O2 -s
-    if ($LASTEXITCODE -eq 0) {
-        Write-Host "Bloqueador de teclado -> $kbdExe"
-    } else {
-        Write-Warning "No se pudo compilar kbdblock.exe"
-    }
-}
+Write-Host "Scripts de kiosko copiados -> $bdir"
 
 Write-Host "Compilado -> $bdir"

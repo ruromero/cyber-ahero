@@ -42,7 +42,7 @@ Pensado para funcionar en **Windows XP de 32 bits** y también en Windows de
 | Moverse con teclado | Flechas |
 | Desplazar la rejilla | Rueda del ratón |
 | Pantalla completa | F11 o Alt+Intro |
-| Salir | Esc (sin ficha fijada) |
+| Salir | Botón X (arriba a la derecha) o Esc sin ficha fijada (Esc no sale en modo kiosko) |
 | Moverse con mando | Cruceta o stick izquierdo |
 | Abrir el juego con mando | Botón A (en mandos antiguos, botón 1) |
 | Cerrar la ficha con mando | Botón B (en mandos antiguos, botón 2) |
@@ -350,8 +350,8 @@ Cada script detecta el compilador en `_toolchain\`, compila y deja en
 - una **copia** de la carpeta `games` del repositorio y un `cyber.cfg` con
   `library=games` (ojo: si `games` es muy grande, la copia también),
 - `assets\` (logo),
-- el modo kiosko: `kiosko.bat` y `limpiar.bat` en la raíz, `tools\kiosko.ps1`,
-  `tools\limpiador.ps1` y `kbdblock.exe` (ver [Modo kiosko](#modo-kiosko)).
+- el modo kiosko: `kiosko.bat` y `limpiar.bat` en la raíz, junto al `.exe`
+  (ver [Modo kiosko](#modo-kiosko)).
 
 Si ya tienes tu propio `gcc` + `cmake` en el `PATH`, se usan automáticamente
 (no hace falta `get_toolchain`), o pásalos con `-CC` y `-CMake`.
@@ -509,26 +509,45 @@ Los tests de este modo (Pester) están en `tools\tests\`:
 
 ## Modo kiosko
 
-Para dejar el PC del ciber bloqueado en el menú de juegos:
+El propio `cyber_ahero.exe` deja el portátil bloqueado en el menú de juegos.
+No hace falta PowerShell ni nada más instalado: funciona igual en Windows XP
+y en un portátil moderno de 64 bits.
 
-- **`kiosko.bat`** (doble clic) arranca `tools\kiosko.ps1`, que:
+- **`kiosko.bat`** (doble clic) ejecuta `cyber_ahero.exe --kiosko`, que:
   - aplica restricciones en el registro: sin Administrador de tareas, sin
-    Ejecutar (Win+R), sin tecla Windows, sin botón Inicio y sin Ctrl+Alt+Supr
-    (las de nivel máquina requieren administrador),
-  - evita que Windows reinicie `explorer.exe` y lo mantiene cerrado (sin
-    escritorio ni barra de tareas),
+    Ejecutar (Win+R) y sin tecla Windows (para el usuario y, con permisos de
+    administrador, también para la máquina), y sin botón Inicio,
+  - con administrador, evita que Windows reinicie `explorer.exe`
+    (`AutoRestartShell=0`) y desactiva Ctrl+Alt+Supr (`DisableCAD=1`),
   - se registra para **arrancar solo** al iniciar sesión
-    (`HKLM\...\Windows\CurrentVersion\Run`, valor `CiberAhKiosko`),
-  - abre `cyber_ahero.exe` junto con **`kbdblock.exe`**, que se traga todas las
-    teclas mientras el menú está en pantalla (el menú se maneja con el ratón),
-  - cuando detecta el proceso de un juego, suelta el teclado y **cierra el
-    menú** para liberar CPU; al cerrarse el juego, vuelve a abrir el menú.
-  - Deja un registro en `kiosko.log` junto al `.exe`.
-- **`limpiar.bat`** (doble clic) ejecuta `tools\limpiador.ps1`, que deshace
-  todo lo anterior, para `kbdblock.exe` y **cierra la sesión** de Windows.
+    (`HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, valor
+    `CiberAhKiosko`, que apunta a `kiosko.bat`),
+  - cierra `explorer.exe` (sin escritorio, barra de tareas ni menú Inicio) y
+    lo mantiene cerrado mientras dure el modo kiosko,
+  - **bloquea el teclado** mientras el menú está en pantalla (el menú se
+    maneja con el ratón o el mando); al abrir un juego suelta el teclado y lo
+    vuelve a bloquear cuando el juego termina y vuelve el menú.
+- `kiosko.bat` vuelve a abrir el launcher a los pocos segundos si se cierra
+  por cualquier motivo (un fallo, o alguien lo mata) que no sea el botón Salir.
+- **Botón Salir** (la X arriba a la derecha, junto al Organizador y al tema):
+  deshace todas las restricciones, quita el arranque automático (también de
+  las claves que usaban versiones antiguas, `HKLM\...\Windows\CurrentVersion\Run`
+  y la errónea `HKLM\...\Windows NT\CurrentVersion\Run`), vuelve a abrir el
+  escritorio y sale. **No cierra la sesión**; algunas políticas (tecla
+  Windows, Ejecutar) solo vuelven del todo en el siguiente inicio de sesión.
+- **`limpiar.bat`** (doble clic) es la recuperación: ejecuta
+  `cyber_ahero.exe --limpiar`, que cierra el launcher si está en marcha (y
+  con él el bucle de `kiosko.bat`), deshace todo lo anterior y vuelve a abrir
+  el escritorio, sin mostrar nada. Sirve aunque el menú no esté abierto (por
+  ejemplo, si el menú no llega a arrancar). Deshace los ajustes de la cuenta
+  con la que se ejecuta: usa la misma cuenta que el kiosko.
+- Sin administrador, el modo kiosko arranca igual con lo que se pueda
+  aplicar; el registro dice qué ajustes no se aplicaron.
+- Registro: **`kiosko.log`** junto al `.exe` (texto plano; se va añadiendo):
+  ajustes aplicados y deshechos, juegos iniciados y terminados, y fallos.
 
-El script busca la app primero en `C:\kiosko\cyber_ahero\cyber_ahero\x86\` y,
-si no está, junto a `kiosko.bat`.
+Sin `--kiosko`, el launcher es una ventana normal: el botón Salir y Esc
+simplemente cierran, y F5 reescanea.
 
 ## Notas sobre Windows XP
 
