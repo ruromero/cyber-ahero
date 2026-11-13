@@ -5,6 +5,7 @@
 #include "launcher.h"
 #include "util.h"
 #include "pad_sdl.h"
+#include "redraw.h"
 
 #include <SDL.h>
 #include <SDL_image.h>
@@ -808,6 +809,24 @@ static void update(App *a)
     }
 }
 
+/* How long the loop may sleep waiting for events before the menu must be
+   drawn again (ticket 03: an idle menu draws nothing). Mirrors update(). */
+static int menu_wait_ms(const App *a)
+{
+    Redraw r;
+    redraw_begin(&r, a->frame_last);
+    if (a->video_playing)
+        redraw_animating(&r);
+    else if (a->video)
+        redraw_at(&r, a->hover_start + VIDEO_DELAY_MS);
+    if (a->status[0])
+        redraw_at(&r, a->status_until);
+    /* update() refreshes leave_time every frame while over a tile/panel */
+    if (a->mouse_active && a->pinned < 0 && a->selected >= 0 && a->leave_time != a->frame_last)
+        redraw_at(&r, a->leave_time + HOVER_GRACE_MS);
+    return redraw_wait_ms(&r, SDL_GetTicks());
+}
+
 static void draw_button(App *a, SDL_Rect button, const char *label)
 {
     Fonts *fn = a->fonts;
@@ -1158,7 +1177,12 @@ int app_run(const char *library_root)
     a.fonts = fonts_load(a.scale);
     a.def_icon = create_default_icon(&a);
 
+    int first_frame = 1;
     while (a.running) {
+        if (!first_frame)
+            SDL_WaitEventTimeout(NULL, menu_wait_ms(&a)); /* NULL: wait, leave event queued */
+        first_frame = 0;
+
         SDL_Rect grid;
         layout(&a, &grid);
 

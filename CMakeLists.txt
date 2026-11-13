@@ -40,6 +40,7 @@ set(APP_SOURCES
     src/util_win.c
     src/pad.c
     src/pad_sdl.c
+    src/redraw.c
     third_party/pl_mpeg_impl.c
 )
 
