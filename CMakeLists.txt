@@ -33,6 +33,8 @@ set(APP_SOURCES
     src/main.c
     src/app.c
     src/library.c
+    src/config.c
+    src/fs_win.c
     src/video.c
     src/text.c
     src/launcher.c
@@ -52,6 +54,8 @@ target_link_libraries(cyber_ahero PRIVATE
     SDL2::SDL2
     SDL2_image::SDL2_image
     SDL2_ttf::SDL2_ttf
+    ole32
+    uuid
 )
 
 if(MINGW)
