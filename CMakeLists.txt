@@ -38,6 +38,7 @@ set(APP_SOURCES
     src/launcher.c
     src/util.c
     src/util_win.c
+    src/redraw.c
     third_party/pl_mpeg_impl.c
 )
 
