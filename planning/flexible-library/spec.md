@@ -1,6 +1,6 @@
 ---
 type: spec
-status: open
+status: done
 tags: [library, kiosk, discovery, gamepad, ui]
 ---
 
