@@ -7,6 +7,8 @@
 #include "pad_sdl.h"
 #include "redraw.h"
 #include "organizer.h"
+#include "attract.h"
+#include "config.h"
 
 #include <SDL.h>
 #include <SDL_image.h>
@@ -73,6 +75,8 @@ typedef struct App {
     OrganizerReport *org;   /* rows of the Organizer view, while it is open */
     int org_open;
     int org_scroll;         /* first visible row */
+    /* ticket 10: Attract mode */
+    Attract attract;
 } App;
 
 /*
@@ -838,7 +842,110 @@ static int menu_wait_ms(const App *a)
     /* update() refreshes leave_time every frame while over a tile/panel */
     if (a->mouse_active && a->pinned < 0 && a->selected >= 0 && a->leave_time != a->frame_last)
         redraw_at(&r, a->leave_time + HOVER_GRACE_MS);
+    uint32_t attract_when;
+    if (attract_deadline(&a->attract, &attract_when))
+        redraw_at(&r, attract_when);
     return redraw_wait_ms(&r, SDL_GetTicks());
+}
+
+/* ---- ticket 10: Attract mode ------------------------------------------ */
+
+/* Mouse, keyboard or pad button input (pad sticks/hats count through
+   their menu action, see the pad case in app_run). */
+static int attract_is_input(const SDL_Event *e)
+{
+    switch (e->type) {
+    case SDL_MOUSEMOTION:
+        return e->motion.xrel != 0 || e->motion.yrel != 0; /* not synthetic */
+    case SDL_MOUSEBUTTONDOWN:
+    case SDL_MOUSEWHEEL:
+    case SDL_KEYDOWN:
+    case SDL_JOYBUTTONDOWN:
+    case SDL_CONTROLLERBUTTONDOWN:
+        return 1;
+    default:
+        return 0;
+    }
+}
+
+/* Input happened. Returns 1 if it is consumed by Attract mode (it went back
+   to the menu, or just did), so the caller must ignore it. */
+static int attract_wake(App *a)
+{
+    int was_active = attract_active(&a->attract);
+    if (!attract_input(&a->attract, SDL_GetTicks()))
+        return 0;
+    if (was_active) {
+        stop_video(a);
+        a->selected = -1;
+        a->pinned = -1;
+        a->mouse_active = 0;
+    }
+    return 1;
+}
+
+/* Advances Attract mode; opens the next Entry's preview when it changes. */
+static void attract_step(App *a)
+{
+    if (attract_active(&a->attract) && video_end_count(a->video) > 0)
+        attract_preview_ended(&a->attract);
+    switch (attract_update(&a->attract, SDL_GetTicks(), a->lib->count)) {
+    case ATTRACT_SHOW: {
+        Game *g = &a->lib->games[attract_entry(&a->attract)];
+        stop_video(a);
+        a->selected = -1;
+        a->pinned = -1;
+        if (g->video)
+            a->video = video_open(a->ren, g->video, 0);
+        if (a->video) {
+            video_update(a->video, 0.02);
+            video_play(a->video);
+            a->video_playing = 1;
+        }
+        attract_shown(&a->attract, a->video != NULL);
+        break;
+    }
+    case ATTRACT_STOP:
+        stop_video(a);
+        break;
+    default:
+        break;
+    }
+}
+
+/* Full screen: the preview (or cover) and the Entry's name. */
+static void draw_attract(App *a)
+{
+    int w = BASE_W, h = BASE_H;
+    SDL_GetRendererOutputSize(a->ren, &w, &h);
+    SDL_SetRenderDrawColor(a->ren, 0, 0, 0, 255);
+    SDL_RenderClear(a->ren);
+    int i = attract_entry(&a->attract);
+    if (i < 0 || i >= a->lib->count)
+        return;
+    Fonts *fn = a->fonts;
+    int bar = fn ? TTF_FontHeight(fn->title) * 2 : 0;
+    SDL_Rect box = { 0, 0, w, h - bar };
+    if (a->video) {
+        video_update(a->video, a->frame_dt);
+        video_draw(a->video, a->ren, &box);
+    } else {
+        int iw = 0, ih = 0;
+        SDL_Texture *t = app_cover(a, i, &iw, &ih);
+        if (!t) {
+            t = a->def_icon;
+            iw = a->def_w;
+            ih = a->def_h;
+        }
+        if (t) {
+            SDL_Rect r = fit_into(iw, ih, box);
+            SDL_RenderCopy(a->ren, t, NULL, &r);
+        }
+    }
+    if (fn) {
+        SDL_Rect nb = { 0, h - bar, w, bar };
+        text_draw_centered(a->ren, fn->title, a->lib->games[i].name, COL_WHITE, nb);
+    }
 }
 
 static void draw_button(App *a, SDL_Rect button, const char *label)
@@ -1451,6 +1558,7 @@ int app_run(const char *library_root, const struct LaptopConfig *cfg)
     a.pinned = -1;
     a.frame_last = SDL_GetTicks();
     pad_sdl_init(&a.pads);
+    attract_init(&a.attract, laptop_config_attract_minutes(cfg), SDL_GetTicks());
 
     app_metrics(&a);
 
@@ -1474,6 +1582,8 @@ int app_run(const char *library_root, const struct LaptopConfig *cfg)
 
         SDL_Event e;
         while (SDL_PollEvent(&e)) {
+            if (attract_is_input(&e) && attract_wake(&a))
+                continue;
             switch (e.type) {
             case SDL_QUIT:
                 a.running = 0;
@@ -1600,16 +1710,34 @@ int app_run(const char *library_root, const struct LaptopConfig *cfg)
             case SDL_JOYHATMOTION:
             case SDL_JOYAXISMOTION:
             case SDL_CONTROLLERBUTTONDOWN:
-            case SDL_CONTROLLERAXISMOTION:
-                pad_menu_action(&a, &grid, pad_sdl_event(&a.pads, &e));
+            case SDL_CONTROLLERAXISMOTION: {
+                PadAction act = pad_sdl_event(&a.pads, &e);
+                if (act != PAD_ACT_NONE && attract_wake(&a))
+                    break;
+                pad_menu_action(&a, &grid, act);
+                break;
+            }
+            case SDL_WINDOWEVENT:
+                /* ticket 10: until the launcher waits for the game (ticket 04
+                   calls attract_game_running around its wait), a launched
+                   game taking the focus counts as a game running. */
+                if (e.window.event == SDL_WINDOWEVENT_FOCUS_LOST &&
+                    attract_game_running(&a.attract, 1, SDL_GetTicks()))
+                    stop_video(&a);
+                else if (e.window.event == SDL_WINDOWEVENT_FOCUS_GAINED)
+                    attract_game_running(&a.attract, 0, SDL_GetTicks());
                 break;
             default:
                 break;
             }
         }
 
+        attract_step(&a);
         update(&a);
-        draw(&a);
+        if (attract_active(&a.attract))
+            draw_attract(&a);
+        else
+            draw(&a);
         SDL_RenderPresent(ren);
 
         Uint32 elapsed = SDL_GetTicks() - a.frame_last;

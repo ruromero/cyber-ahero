@@ -44,6 +44,7 @@ set(APP_SOURCES
     src/pad_sdl.c
     src/redraw.c
     src/organizer.c
+    src/attract.c
     third_party/pl_mpeg_impl.c
 )
 
