@@ -2,7 +2,7 @@
 #include "library.h"
 #include "video.h"
 #include "text.h"
-#include "launcher.h"
+#include "launch.h"
 #include "util.h"
 #include "pad_sdl.h"
 #include "redraw.h"
@@ -727,29 +727,50 @@ static void pad_menu_action(App *a, const SDL_Rect *grid, PadAction act)
     }
 }
 
+static void app_rescan(App *a); /* ticket 06 section below */
+
+static void hide_menu(void *user)
+{
+    App *a = user;
+    SDL_HideWindow(a->win);
+    if (attract_game_running(&a->attract, 1, SDL_GetTicks()))
+        stop_video(a);
+}
+
+/* Starts the selected Entry and waits for it with the window hidden and
+ * nothing drawn; then the menu comes back with a fresh Library. */
 static void launch(App *a)
 {
     int i = a->selected;
     if (i < 0 || i >= a->lib->count)
         return;
     Game *g = &a->lib->games[i];
-    const char *target = g->shortcut ? g->shortcut : g->exe;
-    if (!target) {
-        app_status(a, "No hay lanzador (.lnk ni .exe) en la carpeta");
+    stop_video(a);
+    LaunchTarget t;
+    t.exe = g->exe;
+    t.shortcut = g->exe ? NULL : g->shortcut;
+    t.args = g->args;
+    t.work_dir = g->work_dir;
+    t.wait = g->wait;
+
+    LaunchResult r = launch_and_wait(proc_win(), &t, hide_menu, a);
+    if (r == LAUNCH_FAILED) {
+        char buf[300];
+        SDL_snprintf(buf, sizeof(buf), "No se pudo iniciar %s", g->name);
+        app_status(a, buf);
         return;
     }
-    if (launcher_open(target, g->dir) == 0) {
-        int sel = a->selected;
-        a->selected = -1;
-        a->pinned = -1;
-        stop_video(a);
-        a->leave_time = SDL_GetTicks() - 1000000;
-        char buf[300];
-        SDL_snprintf(buf, sizeof(buf), "Abriendo %s ...", g->name);
-        app_status(a, buf);
-    } else {
-        app_status(a, "No se pudo abrir el juego");
-    }
+
+    SDL_ShowWindow(a->win);
+    SDL_RaiseWindow(a->win);
+    /* input typed into the game must not reach the menu */
+    SDL_FlushEvents(SDL_KEYDOWN, SDL_MOUSEWHEEL);
+    SDL_FlushEvents(SDL_JOYAXISMOTION, SDL_JOYBUTTONUP);
+    SDL_FlushEvents(SDL_CONTROLLERAXISMOTION, SDL_CONTROLLERBUTTONUP);
+    attract_game_running(&a->attract, 0, SDL_GetTicks());
+    app_rescan(a);
+    a->leave_time = SDL_GetTicks() - 1000000;
+    a->frame_last = SDL_GetTicks();
 }
 
 static void text_ellipsized(SDL_Renderer *ren, TTF_Font *f, const char *s, SDL_Color c, SDL_Rect box)
@@ -1717,16 +1738,6 @@ int app_run(const char *library_root, const struct LaptopConfig *cfg)
                 pad_menu_action(&a, &grid, act);
                 break;
             }
-            case SDL_WINDOWEVENT:
-                /* ticket 10: until the launcher waits for the game (ticket 04
-                   calls attract_game_running around its wait), a launched
-                   game taking the focus counts as a game running. */
-                if (e.window.event == SDL_WINDOWEVENT_FOCUS_LOST &&
-                    attract_game_running(&a.attract, 1, SDL_GetTicks()))
-                    stop_video(&a);
-                else if (e.window.event == SDL_WINDOWEVENT_FOCUS_GAINED)
-                    attract_game_running(&a.attract, 0, SDL_GetTicks());
-                break;
             default:
                 break;
             }

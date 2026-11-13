@@ -27,7 +27,8 @@ Pensado para funcionar en **Windows XP de 32 bits** y también en Windows de
 5. A los ~0,4 s empieza a reproducirse el vídeo de preview en bucle (con
    sonido). Si no hay vídeo, se muestra la imagen o un aviso.
 6. El juego **no** se abre al pasar el ratón: pulsa **JUGAR** (o Intro/Espacio,
-   o doble clic sobre el icono).
+   o doble clic sobre el icono). Mientras juegas, el lanzador se oculta y
+   espera; al cerrar el juego vuelve solo.
 
 ### Controles
 
@@ -151,6 +152,37 @@ Si el archivo de `exe` existe, gana siempre a los accesos directos y a la
 detección automática. Con esto no hace falta ni `.lnk` ni que el `.exe` se llame
 parecido a la carpeta. Si no existe, se prueban los accesos directos y la
 detección automática; si nada funciona, el juego se oculta.
+
+### Argumentos, carpeta de trabajo y proceso a esperar
+
+```
+exe=DOSBox\dosbox.exe
+args=-conf doom.conf -noconsole    <- argumentos para el ejecutable
+dir=..\Doom                         <- carpeta de trabajo
+wait=empires2.exe                   <- proceso real del juego (ver abajo)
+```
+
+- **`args=`**: se pasan tal cual al ejecutable, detrás de su ruta entre
+  comillas (`"D:\Games\DOSBox\dosbox.exe" -conf doom.conf -noconsole`). Si un
+  argumento lleva espacios, ponle tú las comillas.
+- **`dir=`**: carpeta en la que arranca el juego. Relativa a la carpeta del
+  ejecutable ya resuelto (`..\Doom` con el ejemplo de arriba es
+  `D:\Games\DOSBox\..\Doom`) o absoluta. Sin `dir=`, el juego arranca en la
+  carpeta de su ejecutable. Los accesos directos usan la carpeta que diga el
+  propio `.lnk`.
+- **`wait=`**: para juegos que arrancan con un lanzador/ayudante que se cierra
+  enseguida. Es el nombre del ejecutable del juego de verdad (`empires2.exe`,
+  `empires2` o `AoE2\empires2.exe` valen igual). El lanzador busca ese proceso
+  durante un máximo de **60 segundos** y espera a que termine; si no aparece,
+  vuelve el menú.
+
+Al pulsar JUGAR el lanzador arranca el juego él mismo, oculta su ventana, deja
+de dibujar y espera (sin gastar CPU) a que el juego termine. Entonces vuelve el
+menú, se **reescanea la biblioteca** (aparecen los juegos instalados mientras
+tanto) y se redibuja. Con un acceso directo se espera al proceso que devuelva
+Windows; si no devuelve ninguno (p. ej. un `.lnk` a algo que no es un
+programa), el menú vuelve enseguida, salvo que se indique `wait=`. Si el juego
+no se puede arrancar, el menú muestra *No se pudo iniciar <juego>*.
 
 ## Una biblioteca para todos los portátiles
 

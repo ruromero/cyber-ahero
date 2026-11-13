@@ -37,7 +37,8 @@ set(APP_SOURCES
     src/fs_win.c
     src/video.c
     src/text.c
-    src/launcher.c
+    src/launch.c
+    src/launch_win.c
     src/util.c
     src/util_win.c
     src/pad.c

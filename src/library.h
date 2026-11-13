@@ -24,6 +24,13 @@ typedef struct Game {
     int meta_count;
     int icon_score;
     int exe_score;
+    /* Launching (ticket 04), from the Entry's options */
+    char *args;      /* args=: launch arguments, or NULL */
+    /* Working folder for exe: dir= (absolute, or relative to the
+     * executable's folder), else the executable's folder. NULL for a
+     * shortcut, which keeps its own. */
+    char *work_dir;
+    char *wait;      /* wait=: executable name of the real game process, or NULL */
 } Game;
 
 typedef enum HiddenReason {
