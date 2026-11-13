@@ -86,6 +86,53 @@ char *laptop_config_library_root(const LaptopConfig *cfg, const char *arg, const
     return path_join(exe_dir, "games");
 }
 
+/* --- One Library for every laptop (ticket 02) --- */
+
+char **laptop_config_installs(const LaptopConfig *cfg)
+{
+    char **list = xmalloc(sizeof(char *));
+    int n = 0;
+    list[0] = NULL;
+    const char *val = laptop_config_get(cfg, "installs");
+    if (!val)
+        return list;
+    char *buf = xstrdup(val);
+    char *part = buf;
+    while (part) {
+        char *semi = strchr(part, ';');
+        if (semi)
+            *semi = 0;
+        char *t = trim(part);
+        if (*t) {
+            list = xrealloc(list, (size_t)(n + 2) * sizeof(char *));
+            list[n++] = xstrdup(t);
+            list[n] = NULL;
+        }
+        part = semi ? semi + 1 : NULL;
+    }
+    free(buf);
+    return list;
+}
+
+void laptop_config_list_free(char **list)
+{
+    if (!list)
+        return;
+    for (int i = 0; list[i]; i++)
+        free(list[i]);
+    free(list);
+}
+
+const char *laptop_config_exe_override(const LaptopConfig *cfg, const char *entry_folder)
+{
+    char *key = xmalloc(strlen(entry_folder) + 5);
+    strcpy(key, "exe.");
+    strcat(key, entry_folder);
+    const char *val = laptop_config_get(cfg, key);
+    free(key);
+    return val;
+}
+
 /* ticket 10 */
 int laptop_config_attract_minutes(const LaptopConfig *cfg)
 {

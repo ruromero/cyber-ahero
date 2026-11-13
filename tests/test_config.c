@@ -71,6 +71,23 @@ static void test_library_root_defaults_to_games_next_to_exe(void)
     laptop_config_free(cfg);
 }
 
+static void test_install_folders_are_split_on_semicolons_in_order(void)
+{
+    LaptopConfig *cfg = laptop_config_parse("installs= C:\\Juegos ;;D:\\Games\\ ;\n");
+    char **dirs = laptop_config_installs(cfg);
+    CHECK_STR(dirs[0], "C:\\Juegos");
+    CHECK_STR(dirs[1], "D:\\Games\\");
+    CHECK_STR(dirs[2], NULL);
+    laptop_config_list_free(dirs);
+    laptop_config_free(cfg);
+
+    cfg = laptop_config_parse(NULL);
+    dirs = laptop_config_installs(cfg);
+    CHECK_STR(dirs[0], NULL);
+    laptop_config_list_free(dirs);
+    laptop_config_free(cfg);
+}
+
 /* ticket 10: attract= idle minutes */
 static void test_attract_defaults_to_three_minutes(void)
 {
@@ -109,6 +126,7 @@ static void test_attract_huge_value_is_capped_at_a_week(void)
 
 int main(void)
 {
+    RUN_TEST(test_install_folders_are_split_on_semicolons_in_order);
     RUN_TEST(test_values_are_read_by_key_ignoring_case_and_spaces);
     RUN_TEST(test_missing_file_gives_empty_configuration);
     RUN_TEST(test_first_value_of_a_key_wins);
