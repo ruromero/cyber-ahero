@@ -4,6 +4,8 @@
 #include "text.h"
 #include "launcher.h"
 #include "util.h"
+#include "pad_sdl.h"
+#include "redraw.h"
 
 #include <SDL.h>
 #include <SDL_image.h>
@@ -60,6 +62,9 @@ typedef struct App {
     int title_h;
     int pad;
     int radius;
+
+    /* ticket 08: gamepad navigation */
+    PadNav pads;
 } App;
 
 /*
@@ -678,6 +683,32 @@ static void move_selection(App *a, const SDL_Rect *grid, int dx, int dy)
     scroll_into_view(a, grid, i);
 }
 
+static void launch(App *a);
+
+/* Gamepad: same effect as the arrow keys, Enter and Esc (without quitting). */
+static void pad_menu_action(App *a, const SDL_Rect *grid, PadAction act)
+{
+    if (act == PAD_ACT_NONE)
+        return;
+    a->mouse_active = 0;
+    switch (act) {
+    case PAD_ACT_LEFT:  move_selection(a, grid, -1, 0); a->pinned = a->selected; break;
+    case PAD_ACT_RIGHT: move_selection(a, grid, 1, 0);  a->pinned = a->selected; break;
+    case PAD_ACT_UP:    move_selection(a, grid, 0, -1); a->pinned = a->selected; break;
+    case PAD_ACT_DOWN:  move_selection(a, grid, 0, 1);  a->pinned = a->selected; break;
+    case PAD_ACT_LAUNCH:
+        launch(a);
+        a->selected = -1; a->pinned = -1;
+        break;
+    case PAD_ACT_CLOSE:
+        a->pinned = -1;
+        set_selected(a, -1);
+        break;
+    default:
+        break;
+    }
+}
+
 static void launch(App *a)
 {
     int i = a->selected;
@@ -776,6 +807,24 @@ static void update(App *a)
         else if (SDL_TICKS_PASSED(now, a->leave_time + HOVER_GRACE_MS))
             set_selected(a, -1);
     }
+}
+
+/* How long the loop may sleep waiting for events before the menu must be
+   drawn again (ticket 03: an idle menu draws nothing). Mirrors update(). */
+static int menu_wait_ms(const App *a)
+{
+    Redraw r;
+    redraw_begin(&r, a->frame_last);
+    if (a->video_playing)
+        redraw_animating(&r);
+    else if (a->video)
+        redraw_at(&r, a->hover_start + VIDEO_DELAY_MS);
+    if (a->status[0])
+        redraw_at(&r, a->status_until);
+    /* update() refreshes leave_time every frame while over a tile/panel */
+    if (a->mouse_active && a->pinned < 0 && a->selected >= 0 && a->leave_time != a->frame_last)
+        redraw_at(&r, a->leave_time + HOVER_GRACE_MS);
+    return redraw_wait_ms(&r, SDL_GetTicks());
 }
 
 static void draw_button(App *a, SDL_Rect button, const char *label)
@@ -1109,6 +1158,7 @@ int app_run(const char *library_root, const struct LaptopConfig *cfg)
     a.selected = -1;
     a.pinned = -1;
     a.frame_last = SDL_GetTicks();
+    pad_sdl_init(&a.pads);
 
     app_metrics(&a);
 
@@ -1127,7 +1177,12 @@ int app_run(const char *library_root, const struct LaptopConfig *cfg)
     a.fonts = fonts_load(a.scale);
     a.def_icon = create_default_icon(&a);
 
+    int first_frame = 1;
     while (a.running) {
+        if (!first_frame)
+            SDL_WaitEventTimeout(NULL, menu_wait_ms(&a)); /* NULL: wait, leave event queued */
+        first_frame = 0;
+
         SDL_Rect grid;
         layout(&a, &grid);
 
@@ -1238,6 +1293,15 @@ int app_run(const char *library_root, const struct LaptopConfig *cfg)
                 default:
                     break;
                 }
+                break;
+            case SDL_JOYDEVICEADDED:
+            case SDL_JOYDEVICEREMOVED:
+            case SDL_JOYBUTTONDOWN:
+            case SDL_JOYHATMOTION:
+            case SDL_JOYAXISMOTION:
+            case SDL_CONTROLLERBUTTONDOWN:
+            case SDL_CONTROLLERAXISMOTION:
+                pad_menu_action(&a, &grid, pad_sdl_event(&a.pads, &e));
                 break;
             default:
                 break;

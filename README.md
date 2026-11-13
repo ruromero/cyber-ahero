@@ -42,6 +42,13 @@ Pensado para funcionar en **Windows XP de 32 bits** y también en Windows de
 | Desplazar la rejilla | Rueda del ratón |
 | Pantalla completa | F11 o Alt+Intro |
 | Salir | Esc (sin ficha fijada) |
+| Moverse con mando | Cruceta o stick izquierdo |
+| Abrir el juego con mando | Botón A (en mandos antiguos, botón 1) |
+| Cerrar la ficha con mando | Botón B (en mandos antiguos, botón 2) |
+
+Sirven los mandos tipo Xbox y los mandos DirectInput antiguos; se pueden
+conectar o desconectar con el menú abierto. El mando solo controla el menú:
+mientras hay un juego en primer plano el launcher lo ignora.
 
 ## Estructura de `games`
 
@@ -214,6 +221,9 @@ ctest --test-dir build/host-tests --output-on-failure
 ```
 
 En una build de Windows se activan con `-DCYBER_TESTS=ON`.
+
+Qué instalar (y cómo desinstalarlo) en macOS y Windows para compilar y pasar
+los tests: [docs/dev-setup.md](docs/dev-setup.md).
 
 ## Distribuir
 
